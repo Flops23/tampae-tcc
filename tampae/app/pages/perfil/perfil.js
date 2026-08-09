@@ -31,6 +31,16 @@ async function init() {
         if (updateError) return alert("Não foi possível atualizar a foto.");
         window.location.reload();
     });
+
+    $("btnEditarPerfil")?.addEventListener("click", async () => {
+        const nome = window.prompt("Como você quer ser chamado?", profile.nome ?? "");
+        if (nome === null) return;
+        const novoNome = nome.trim();
+        if (!novoNome) return alert("O nome não pode ficar vazio.");
+        const { error: updateError } = await supabase.from("profiles").update({ nome: novoNome }).eq("id", user.id);
+        if (updateError) return alert("Não foi possível atualizar seu nome.");
+        window.location.reload();
+    });
 }
 
 function renderProfile(profile) {
