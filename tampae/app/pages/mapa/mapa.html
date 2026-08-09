@@ -7,86 +7,34 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 <title>Mapa</title>
 <link rel="stylesheet" href="mapa.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
 </head>
-
 <body>
-
-
-
 <header class="top-bar">
-
-    <a href="../perfil/perfil.html" class="profile">
-        <span class="material-symbols-rounded">person</span>
-    </a>
-
-    <div class="app-name">
-        TampAÊ
-    </div>
-
-    <a href="../configura/configuracoes.html" class="settings">
-        <span class="material-symbols-rounded">settings</span>
-    </a>
-
+    <a href="../perfil/perfil.html" class="profile"><span class="material-symbols-rounded">person</span></a>
+    <div class="app-name">TampAÊ</div>
+    <a href="../configura/configuracoes.html" class="settings"><span class="material-symbols-rounded">settings</span></a>
 </header>
-
 <main class="map-wrap">
-
     <div id="map"></div>
-
     <div class="route-card" id="routeCard">
         <div class="icon"><span class="material-symbols-rounded">recycling</span></div>
-        <div class="info">
-            <b id="routeName">—</b>
-            <span id="routeDetails">—</span>
-        </div>
-        <button class="close" id="routeClose">
-            <span class="material-symbols-rounded">close</span>
-        </button>
+        <div class="info"><b id="routeName">—</b><span id="routeDetails">—</span></div>
+        <button class="close" id="routeClose" type="button"><span class="material-symbols-rounded">close</span></button>
     </div>
-
     <div class="toast" id="toast"></div>
-
-    <button class="locate-btn" id="locateBtn">
-        <span class="material-symbols-rounded">near_me</span>
-        <span>Ponto mais próximo</span>
-    </button>
-
+    <button class="locate-btn" id="locateBtn" type="button"><span class="material-symbols-rounded">near_me</span><span>Ponto mais próximo</span></button>
 </main>
-
 <nav class="bottom-nav">
-
-    <a href="../inicio/home.html" class="nav-item">
-        <span class="material-symbols-rounded">home</span>
-        <span>Home</span>
-    </a>
-
-    <a href="../mapa/mapa.html" class="nav-item">
-        <span class="material-symbols-rounded">map</span>
-        <span>Mapa</span>
-    </a>
-
-    <a href="../ranking/rank.html" class="nav-item">
-        <span class="material-symbols-rounded">emoji_events</span>
-        <span>Rank</span>
-    </a>
-
-    <a href="../coleta/qr.html" class="nav-item active">
-        <span class="material-symbols-rounded">qr_code_scanner</span>
-        <span>QR</span>
-    </a>
-
+    <a href="../inicio/home.html" class="nav-item"><span class="material-symbols-rounded">home</span><span>Home</span></a>
+    <a href="../mapa/mapa.html" class="nav-item active"><span class="material-symbols-rounded">map</span><span>Mapa</span></a>
+    <a href="../ranking/rank.html" class="nav-item"><span class="material-symbols-rounded">emoji_events</span><span>Rank</span></a>
+    <a href="../coleta/qr.html" class="nav-item"><span class="material-symbols-rounded">qr_code_scanner</span><span>QR</span></a>
 </nav>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script src="mapa.js"></script>
-
-
+<script type="module" src="mapa.js"></script>
 </body>
 </html>
