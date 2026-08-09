@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Mapa</title>
+<link rel="stylesheet" href="../../css/layout.css">
 <link rel="stylesheet" href="mapa.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -20,11 +21,7 @@
 </header>
 <main class="map-wrap">
     <div id="map"></div>
-    <div class="route-card" id="routeCard">
-        <div class="icon"><span class="material-symbols-rounded">recycling</span></div>
-        <div class="info"><b id="routeName">—</b><span id="routeDetails">—</span></div>
-        <button class="close" id="routeClose" type="button"><span class="material-symbols-rounded">close</span></button>
-    </div>
+    <div class="route-card" id="routeCard"><div class="icon"><span class="material-symbols-rounded">recycling</span></div><div class="info"><b id="routeName">—</b><span id="routeDetails">—</span></div><button class="close" id="routeClose" type="button"><span class="material-symbols-rounded">close</span></button></div>
     <div class="toast" id="toast"></div>
     <button class="locate-btn" id="locateBtn" type="button"><span class="material-symbols-rounded">near_me</span><span>Ponto mais próximo</span></button>
 </main>
