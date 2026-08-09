@@ -6,8 +6,9 @@ let stream = null;
 let scanning = false;
 let animationFrame = null;
 let sessionTimer = null;
+let sessionWatcher = null;
 let currentSession = null;
-const SESSION_SECONDS = 120;
+let currentUser = null;
 
 function showState(state) {
     ["scanOverlay", "statePermissao", "stateErro", "stateConectando", "sessionView", "stateEncerrada"].forEach((id) => {
@@ -29,13 +30,11 @@ async function stopCamera() {
 
 async function startCamera() {
     await stopCamera();
-
     if (!navigator.mediaDevices?.getUserMedia) {
         $("erroTexto").textContent = "Seu navegador não oferece acesso à câmera.";
         showState("stateErro");
         return;
     }
-
     try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
         $("video").srcObject = stream;
@@ -83,7 +82,6 @@ function parseQr(raw) {
 async function handleQr(raw) {
     showState("stateConectando");
     $("conectandoTexto").textContent = "Validando máquina...";
-
     const { machineId, eventId } = parseQr(raw);
     if (!machineId) {
         $("erroTexto").textContent = "O QR Code não contém um identificador de máquina válido.";
@@ -102,7 +100,6 @@ async function handleQr(raw) {
         showState("stateErro");
         return;
     }
-
     if (machine.status !== "ativa") {
         $("erroTexto").textContent = `A máquina está ${machine.status === "manutencao" ? "em manutenção" : "inativa"}.`;
         showState("stateErro");
@@ -111,11 +108,13 @@ async function handleQr(raw) {
 
     const user = await requireAuth();
     if (!user) return;
+    currentUser = user;
+    await closeOwnWaitingSessions();
 
     const { data: session, error } = await supabase
         .from("machine_sessions")
         .insert({ machine_id: machine.id, user_id: user.id, evento_id: eventId || null })
-        .select("id,criado_em,expira_em,machine_id")
+        .select("id,criado_em,expira_em,machine_id,user_id,evento_id")
         .single();
 
     if (error) {
@@ -128,8 +127,20 @@ async function handleQr(raw) {
     currentSession = session;
     $("maquinaNome").textContent = machine.nome;
     startSessionTimer(new Date(session.expira_em));
+    startSessionWatcher();
     showState("sessionView");
     await stopCamera();
+}
+
+async function closeOwnWaitingSessions() {
+    const { data } = await supabase
+        .from("machine_sessions")
+        .select("id")
+        .eq("user_id", currentUser.id)
+        .eq("status", "aguardando");
+    for (const row of data || []) {
+        await supabase.rpc("encerrar_sessao_usuario", { p_session_id: row.id });
+    }
 }
 
 function startSessionTimer(expiresAt) {
@@ -138,7 +149,6 @@ function startSessionTimer(expiresAt) {
     const ring = $("anelTempo");
     const circumference = 2 * Math.PI * 44;
     ring.style.strokeDasharray = circumference;
-
     const tick = () => {
         const remaining = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 1000));
         const minutes = String(Math.floor(remaining / 60)).padStart(2, "0");
@@ -147,15 +157,95 @@ function startSessionTimer(expiresAt) {
         ring.style.strokeDashoffset = circumference * (1 - remaining / total);
         if (remaining <= 0) {
             clearInterval(sessionTimer);
-            showClosed("Sessão expirada", "+0 pts", "O tempo da sessão terminou. A máquina pode concluir a coleta registrada.");
+            finishFromServer("Sessão expirada");
         }
     };
     tick();
     sessionTimer = setInterval(tick, 1000);
 }
 
+function startSessionWatcher() {
+    clearInterval(sessionWatcher);
+    sessionWatcher = setInterval(checkSessionState, 1200);
+    checkSessionState();
+}
+
+function stopSessionWatcher() {
+    clearInterval(sessionWatcher);
+    sessionWatcher = null;
+}
+
+async function checkSessionState() {
+    if (!currentSession?.id) return;
+    const { data, error } = await supabase
+        .from("machine_sessions")
+        .select("id,status,expira_em,concluida_em")
+        .eq("id", currentSession.id)
+        .maybeSingle();
+    if (error) {
+        console.error(error);
+        return;
+    }
+    if (!data || data.status === "concluida") {
+        await finishFromServer("Sessão encerrada");
+        return;
+    }
+    if (new Date(data.expira_em).getTime() <= Date.now()) {
+        await finishFromServer("Sessão expirada");
+    }
+}
+
+async function getSessionPoints() {
+    if (!currentSession) return 0;
+    const { data } = await supabase
+        .from("collections")
+        .select("pontos")
+        .eq("user_id", currentSession.user_id)
+        .eq("machine_id", currentSession.machine_id)
+        .eq("evento_id", currentSession.evento_id)
+        .gte("criado_em", currentSession.criado_em);
+    return (data || []).reduce((sum, row) => sum + Number(row.pontos || 0), 0);
+}
+
+async function finishFromServer(title) {
+    if (!currentSession?.id) {
+        showClosed(title, "+0 pts", "A sessão foi encerrada.");
+        return;
+    }
+    const sessionBeforeClose = { ...currentSession };
+    clearInterval(sessionTimer);
+    stopSessionWatcher();
+
+    const { data, error } = await supabase.rpc("encerrar_sessao_usuario", {
+        p_session_id: sessionBeforeClose.id
+    });
+
+    let points = 0;
+    if (!error && data) {
+        const row = Array.isArray(data) ? data[0] : data;
+        points = Number(row?.pontos_sessao || 0);
+    } else {
+        const { data: fallback } = await supabase
+            .from("collections")
+            .select("pontos")
+            .eq("user_id", sessionBeforeClose.user_id)
+            .eq("machine_id", sessionBeforeClose.machine_id)
+            .eq("evento_id", sessionBeforeClose.evento_id)
+            .gte("criado_em", sessionBeforeClose.criado_em);
+        points = (fallback || []).reduce((sum, item) => sum + Number(item.pontos || 0), 0);
+    }
+
+    currentSession = null;
+    showClosed(
+        title,
+        `+${points} pts`,
+        points > 0 ? "Sua sessão foi encerrada e seus pontos foram contabilizados." : "Sua sessão foi encerrada. Nenhuma coleta foi registrada nesta sessão."
+    );
+}
+
 function showClosed(title, points, text) {
     clearInterval(sessionTimer);
+    stopSessionWatcher();
     $("encerradaTitulo").textContent = title;
     $("pontosGanhos").textContent = points;
     $("encerradaTexto").textContent = text;
@@ -165,16 +255,34 @@ function showClosed(title, points, text) {
 async function init() {
     const user = await requireAuth();
     if (!user) return;
-
+    currentUser = user;
     $("btnPedirPermissao")?.addEventListener("click", startCamera);
     $("btnTentarNovamente")?.addEventListener("click", startCamera);
     $("btnEscanearDeNovo")?.addEventListener("click", startCamera);
-    $("btnEncerrar")?.addEventListener("click", () => {
-        showClosed("Sessão encerrada", "+0 pts", "A sessão do aplicativo foi encerrada. A coleta só será pontuada quando a máquina registrar o depósito.");
+    $("btnEncerrar")?.addEventListener("click", async () => {
+        if (!currentSession?.id) {
+            showClosed("Sessão encerrada", "+0 pts", "A sessão já não está ativa.");
+            return;
+        }
+        const { data, error } = await supabase.rpc("encerrar_sessao_usuario", { p_session_id: currentSession.id });
+        if (error) {
+            console.error(error);
+            $("encerradaTexto").textContent = "Não foi possível encerrar a sessão. Tente novamente.";
+            return;
+        }
+        const row = Array.isArray(data) ? data[0] : data;
+        const points = Number(row?.pontos_sessao || 0);
+        currentSession = null;
+        clearInterval(sessionTimer);
+        stopSessionWatcher();
+        showClosed("Sessão encerrada", `+${points} pts`, points > 0 ? "Sessão encerrada. Seus pontos foram contabilizados." : "Sessão encerrada. Nenhuma coleta foi registrada.");
     });
-
     showState("statePermissao");
 }
 
-window.addEventListener("pagehide", stopCamera);
+window.addEventListener("pagehide", async () => {
+    await stopCamera();
+    stopSessionWatcher();
+});
+
 init();
