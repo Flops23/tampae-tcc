@@ -4,6 +4,7 @@ import { requireAuth } from "../../js/auth.js";
 const $ = (id) => document.getElementById(id);
 let eventos = [];
 let eventoAtual = null;
+let usuarioAtualId = null;
 
 function formatDate(value) {
     return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
@@ -27,7 +28,10 @@ function renderEventSelector() {
     host.innerHTML = `
         <div class="info">
             <span class="material-symbols-rounded">emoji_events</span>
-            <div><b>${escapeHtml(event.nome)}</b><small>${formatDate(event.data_inicio)} — ${formatDate(event.data_fim)}</small></div>
+            <div>
+                <b>${escapeHtml(event.nome)}</b>
+                <small>${formatDate(event.data_inicio)} — ${formatDate(event.data_fim)}</small>
+            </div>
         </div>
         <span class="badge">${statusLabel(event.status)}</span>
         <select id="eventoSelectInput" aria-label="Selecionar evento">
@@ -38,6 +42,21 @@ function renderEventSelector() {
         eventoAtual = eventos.find((item) => item.id === e.target.value) ?? eventos[0];
         loadRanking();
     });
+}
+
+function initials(name) {
+    return String(name || "U").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+}
+
+function corAvatar(nome) {
+    const cores = [
+        "#16a34a", "#0ea5e9", "#a855f7", "#f97316", "#ec4899",
+        "#14b8a6", "#6366f1", "#eab308", "#ef4444", "#22c55e"
+    ];
+
+    let soma = 0;
+    for (let i = 0; i < nome.length; i++) soma += nome.charCodeAt(i);
+    return cores[soma % cores.length];
 }
 
 function renderRanking(rows) {
@@ -51,21 +70,46 @@ function renderRanking(rows) {
         return;
     }
 
-    const medals = ["🥇", "🥈", "🥉"];
-    podium.innerHTML = rows.slice(0, 3).map((row, index) => `
-        <div class="podium-item">
-            <div class="podium-avatar">${initials(row.nome)}</div>
-            <b>${escapeHtml(row.nome)}</b>
-            <strong>${Number(row.pontos_total).toLocaleString("pt-BR")} pts</strong>
-            <span>${medals[index]}</span>
-        </div>`).join("");
+    const rankeados = [...rows].sort((a, b) => Number(b.pontos_total) - Number(a.pontos_total)).slice(0, 10);
+    const [primeiro, segundo, terceiro] = rankeados;
 
-    list.innerHTML = rows.map((row, index) => `
-        <div class="rank-row">
-            <span class="posicao">${index + 1}</span>
-            <div class="avatar">${initials(row.nome)}</div>
-            <div class="nome"><b>${escapeHtml(row.nome)}</b><small>${Number(row.pontos_total).toLocaleString("pt-BR")} pontos</small></div>
-        </div>`).join("");
+    const ordemVisual = [
+        { pessoa: segundo, classe: "second", pos: 2 },
+        { pessoa: primeiro, classe: "first", pos: 1 },
+        { pessoa: terceiro, classe: "third", pos: 3 }
+    ].filter((item) => item.pessoa);
+
+    podium.innerHTML = ordemVisual.map(({ pessoa, classe, pos }) => `
+        <div class="podium-item ${classe}">
+            <div class="avatar-wrap">
+                ${pos === 1 ? '<span class="material-symbols-rounded crown">workspace_premium</span>' : ''}
+                <div class="avatar" style="background:${corAvatar(pessoa.nome)}">${initials(pessoa.nome)}</div>
+                <div class="medal">${pos}</div>
+            </div>
+            <div class="nome">${escapeHtml(pessoa.nome)}</div>
+            <div class="pontos">${Number(pessoa.pontos_total).toLocaleString("pt-BR")} pts</div>
+            <div class="base">${pos}</div>
+        </div>
+    `).join("");
+
+    list.innerHTML = rankeados.slice(3).map((pessoa, i) => {
+        const posicao = i + 4;
+        const destaque = pessoa.user_id === usuarioAtualId;
+
+        return `
+            <div class="rank-row ${destaque ? "me" : ""}">
+                <div class="pos">${posicao}º</div>
+                <div class="avatar" style="background:${corAvatar(pessoa.nome)}">${initials(pessoa.nome)}</div>
+                <div class="nome">
+                    ${escapeHtml(pessoa.nome)}
+                    ${destaque ? "<small>Você</small>" : ""}
+                </div>
+                <div class="pontos">
+                    <span class="material-symbols-rounded">recycling</span>
+                    ${Number(pessoa.pontos_total).toLocaleString("pt-BR")}
+                </div>
+            </div>`;
+    }).join("");
 }
 
 async function loadRanking() {
@@ -91,6 +135,8 @@ async function init() {
     const user = await requireAuth();
     if (!user) return;
 
+    usuarioAtualId = user.id;
+
     const { data, error } = await supabase
         .from("events")
         .select("id,nome,descricao,data_inicio,data_fim,status")
@@ -107,12 +153,13 @@ async function init() {
     await loadRanking();
 }
 
-function initials(name) {
-    return String(name || "U").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
-}
-
 function escapeHtml(value) {
-    return String(value ?? "").replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
+    return String(value ?? "").replace(/[&<>\"]/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;"
+    }[char]));
 }
 
 init();
