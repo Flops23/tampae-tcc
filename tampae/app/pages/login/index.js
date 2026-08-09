@@ -63,6 +63,14 @@ function configurarToggleSenha() {
     });
 }
 
+function registrarServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+
+    navigator.serviceWorker.register("../../../sw.js", { scope: "../../../" })
+        .then(() => console.info("TampAê: Service Worker registrado."))
+        .catch((error) => console.error("TampAê: erro ao registrar Service Worker:", error));
+}
+
 function validarEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -200,4 +208,5 @@ formLogin?.addEventListener("submit", fazerLogin);
 formCadastro?.addEventListener("submit", fazerCadastro);
 
 configurarToggleSenha();
+registrarServiceWorker();
 verificarSessaoExistente();
