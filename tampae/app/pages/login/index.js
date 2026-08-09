@@ -66,7 +66,7 @@ function configurarToggleSenha() {
 function registrarServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
 
-    navigator.serviceWorker.register("../../../sw.js", { scope: "../../../" })
+    navigator.serviceWorker.register("../../../sw.js", { scope: "../../../app/" })
         .then(() => console.info("TampAê: Service Worker registrado."))
         .catch((error) => console.error("TampAê: erro ao registrar Service Worker:", error));
 }
@@ -75,11 +75,25 @@ function validarEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+function getHomeUrl() {
+    return new URL("../inicio/home.html", window.location.href).href;
+}
+
 function getRedirectPath() {
     const redirect = new URLSearchParams(window.location.search).get("redirect");
-    return redirect && redirect.startsWith("/app/")
-        ? redirect
-        : "/app/pages/inicio/home.html";
+    if (!redirect) return getHomeUrl();
+
+    try {
+        const destino = new URL(redirect, window.location.origin);
+        const appPath = new URL("../../", window.location.href).pathname;
+        if (destino.origin === window.location.origin && destino.pathname.startsWith(appPath)) {
+            return destino.href;
+        }
+    } catch (error) {
+        console.warn("Redirect inválido ignorado:", error);
+    }
+
+    return getHomeUrl();
 }
 
 async function verificarSessaoExistente() {
@@ -174,10 +188,7 @@ async function fazerCadastro(event) {
         }
 
         if (!data.session) {
-            mostrarMensagem(
-                "Cadastro realizado! Verifique seu e-mail para confirmar a conta.",
-                "sucesso"
-            );
+            mostrarMensagem("Cadastro realizado! Verifique seu e-mail para confirmar a conta.", "sucesso");
             return;
         }
 
