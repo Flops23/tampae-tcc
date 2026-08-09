@@ -9,31 +9,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Rank</title>
 <link rel="stylesheet" href="../../css/layout.css">
-<link rel="stylesheet" href="rank.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
-<style>
-.event-select { position: relative; }
-.event-select select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-.empty-state { padding: 24px; text-align: center; opacity: .7; }
-</style>
+<link rel="stylesheet" href="rank.css">
 </head>
 <body>
-<header class="top-bar">
-    <a href="../perfil/perfil.html" class="profile"><span class="material-symbols-rounded">person</span></a>
-    <div class="app-name">TampAÊ</div>
-    <a href="../configura/configuracoes.html" class="settings"><span class="material-symbols-rounded">settings</span></a>
-</header>
-<main class="content">
-    <div class="event-select" id="eventSelect"></div>
-    <div class="podium" id="podium"></div>
-    <div class="rank-list" id="rankList"></div>
-</main>
-<nav class="bottom-nav">
-    <a href="../inicio/home.html" class="nav-item"><span class="material-symbols-rounded">home</span><span>Home</span></a>
-    <a href="../mapa/mapa.html" class="nav-item"><span class="material-symbols-rounded">map</span><span>Mapa</span></a>
-    <a href="../ranking/rank.html" class="nav-item active"><span class="material-symbols-rounded">emoji_events</span><span>Rank</span></a>
-    <a href="../coleta/qr.html" class="nav-item"><span class="material-symbols-rounded">qr_code_scanner</span><span>QR</span></a>
-</nav>
+<header class="top-bar"><a href="../perfil/perfil.html" class="profile"><span class="material-symbols-rounded">person</span></a><div class="app-name">TampAÊ</div><a href="../configura/configuracoes.html" class="settings"><span class="material-symbols-rounded">settings</span></a></header>
+<main class="content"><div class="event-select" id="eventSelect"></div><div class="podium" id="podium"></div><div class="rank-list" id="rankList"></div></main>
+<nav class="bottom-nav"><a href="../inicio/home.html" class="nav-item"><span class="material-symbols-rounded">home</span><span>Home</span></a><a href="../mapa/mapa.html" class="nav-item"><span class="material-symbols-rounded">map</span><span>Mapa</span></a><a href="../ranking/rank.html" class="nav-item active"><span class="material-symbols-rounded">emoji_events</span><span>Rank</span></a><a href="../coleta/qr.html" class="nav-item"><span class="material-symbols-rounded">qr_code_scanner</span><span>QR</span></a></nav>
 <script type="module" src="rank.js"></script>
 </body>
 </html>
