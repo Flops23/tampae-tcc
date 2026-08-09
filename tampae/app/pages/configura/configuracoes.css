@@ -1,0 +1,556 @@
+/*=========================
+        RESET
+=========================*/
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+    font-family:Arial,Helvetica,sans-serif;
+}
+
+:root{
+
+    --bg:#edf7ef;
+    --surface:#ffffff;
+
+    --primary:#16a34a;
+    --secondary:#22c55e;
+    --dark:#15803d;
+
+    --border:#b7e4c7;
+    --text:#1f2937;
+    --active:#16a34a;
+
+}
+
+html{
+
+    height:100%;
+    -webkit-text-size-adjust:100%;
+
+}
+
+body{
+
+    width:100%;
+    height:100vh;
+
+    background:var(--bg);
+
+    display:flex;
+    flex-direction:column;
+
+    overflow:hidden;
+
+}
+
+/*=========================
+        TOP BAR
+=========================*/
+
+.top-bar{
+
+    width:100%;
+    height:calc(12vh + env(safe-area-inset-top));
+
+    min-height:calc(85px + env(safe-area-inset-top));
+    max-height:calc(120px + env(safe-area-inset-top));
+
+    display:flex;
+    align-items:center;
+
+    gap:12px;
+
+    padding:env(safe-area-inset-top) 5% 0;
+
+    background:linear-gradient(90deg,#15803d,#22c55e);
+
+    color:white;
+
+    box-shadow:0 4px 18px rgba(0,0,0,.18);
+
+    flex-shrink:0;
+
+    z-index:100;
+
+}
+
+.back-btn{
+
+    width:clamp(46px,9vw,58px);
+    aspect-ratio:1;
+
+    border:none;
+    border-radius:50%;
+
+    background:rgba(255,255,255,.18);
+
+    color:white;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+
+    cursor:pointer;
+
+    text-decoration:none;
+
+    transition:.25s;
+
+    flex-shrink:0;
+
+}
+
+.back-btn:hover{
+
+    background:rgba(255,255,255,.28);
+
+}
+
+.back-btn:active{
+
+    transform:scale(.94);
+
+}
+
+.back-btn span{
+
+    font-size:28px;
+
+}
+
+.app-name{
+
+    flex:1;
+
+    color:white;
+
+    font-size:clamp(20px,4.5vw,27px);
+
+    font-weight:800;
+
+    letter-spacing:.5px;
+
+    user-select:none;
+
+}
+
+/*=========================
+        CONTEÚDO
+=========================*/
+
+.content{
+
+    flex:1;
+
+    display:flex;
+    justify-content:flex-start;
+    align-items:center;
+
+    flex-direction:column;
+    gap:6%;
+
+    padding-top:7%;
+    padding-inline:5%;
+    padding-bottom:8%;
+
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+
+}
+
+/*=========================
+        SEÇÕES
+=========================*/
+
+.secao{
+
+    width:100%;
+    max-width:600px;
+
+    flex-shrink:0;
+
+}
+
+.secao-titulo{
+
+    font-size:12.5px;
+
+    font-weight:800;
+
+    color:#6b7280;
+
+    text-transform:uppercase;
+
+    letter-spacing:.6px;
+
+    margin-bottom:8px;
+
+    padding-left:4px;
+
+}
+
+.card-lista{
+
+    width:100%;
+
+    background:white;
+
+    border-radius:18px;
+
+    box-shadow:0 4px 14px rgba(0,0,0,.06);
+
+    overflow:hidden;
+
+}
+
+/*=========================
+     ITEM COM TOGGLE
+=========================*/
+
+.item{
+
+    display:flex;
+    align-items:center;
+
+    gap:14px;
+
+    padding:14px 16px;
+
+    border-bottom:1px solid #f1f5f4;
+
+}
+
+.item:last-child{
+
+    border-bottom:none;
+
+}
+
+.item .icone{
+
+    width:38px;
+    height:38px;
+
+    border-radius:50%;
+
+    background:#dcfce7;
+
+    color:var(--dark);
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    flex-shrink:0;
+
+}
+
+.item .icone span{
+
+    font-size:21px;
+
+}
+
+.item .texto{
+
+    flex:1;
+
+    min-width:0;
+
+}
+
+.item .texto b{
+
+    display:block;
+
+    font-size:14.5px;
+
+    color:var(--text);
+
+    font-weight:700;
+
+}
+
+.item .texto small{
+
+    font-size:12px;
+
+    color:#6b7280;
+
+}
+
+/*=========================
+     TOGGLE SWITCH
+=========================*/
+
+.toggle{
+
+    position:relative;
+
+    width:48px;
+    height:28px;
+
+    flex-shrink:0;
+
+}
+
+.toggle input{
+
+    opacity:0;
+
+    width:0;
+
+    height:0;
+
+}
+
+.toggle .trilho{
+
+    position:absolute;
+
+    cursor:pointer;
+
+    inset:0;
+
+    background:#d1d5db;
+
+    border-radius:999px;
+
+    transition:.25s;
+
+}
+
+.toggle .trilho::before{
+
+    content:"";
+
+    position:absolute;
+
+    width:22px;
+    height:22px;
+
+    left:3px;
+    top:3px;
+
+    background:white;
+
+    border-radius:50%;
+
+    box-shadow:0 2px 5px rgba(0,0,0,.2);
+
+    transition:.25s;
+
+}
+
+.toggle input:checked + .trilho{
+
+    background:linear-gradient(90deg,#16a34a,#22c55e);
+
+}
+
+.toggle input:checked + .trilho::before{
+
+    transform:translateX(20px);
+
+}
+
+/*=========================
+   ITEM DE NAVEGAÇÃO / BOTÃO
+=========================*/
+
+.item.clicavel{
+
+    cursor:pointer;
+
+}
+
+.item.clicavel:active{
+
+    background:#f4fff6;
+
+}
+
+.item .seta{
+
+    color:#9ca3af;
+
+    font-size:20px;
+
+    flex-shrink:0;
+
+}
+
+.item.sair .icone{
+
+    background:#fee2e2;
+
+    color:#dc2626;
+
+}
+
+.item.sair .texto b{
+
+    color:#dc2626;
+
+}
+
+/*=========================
+   FORMULÁRIO — ALTERAR SENHA
+=========================*/
+
+.painel-senha{
+
+    width:100%;
+
+    max-width:600px;
+
+    background:white;
+
+    border-radius:18px;
+
+    box-shadow:0 4px 14px rgba(0,0,0,.06);
+
+    padding:16px;
+
+    display:none;
+
+    flex-direction:column;
+
+    gap:12px;
+
+    flex-shrink:0;
+
+}
+
+.painel-senha.show{
+
+    display:flex;
+
+}
+
+.painel-senha b{
+
+    font-size:14.5px;
+
+    color:var(--text);
+
+}
+
+.campo{
+
+    display:flex;
+    flex-direction:column;
+
+    gap:5px;
+
+}
+
+.campo label{
+
+    font-size:12px;
+
+    color:#6b7280;
+
+    font-weight:600;
+
+}
+
+.campo input{
+
+    padding:11px 13px;
+
+    border:1.5px solid var(--border);
+
+    border-radius:10px;
+
+    font-size:14px;
+
+    color:var(--text);
+
+    outline:none;
+
+}
+
+.campo input:focus{
+
+    border-color:var(--primary);
+
+}
+
+.painel-senha .acoes-form{
+
+    display:flex;
+
+    gap:10px;
+
+    margin-top:4px;
+
+}
+
+.painel-senha .acoes-form button{
+
+    flex:1;
+
+    padding:12px;
+
+    border:none;
+
+    border-radius:12px;
+
+    font-size:13.5px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+}
+
+.btn-salvar{
+
+    background:linear-gradient(90deg,#15803d,#22c55e);
+
+    color:white;
+
+}
+
+.btn-cancelar{
+
+    background:#f1f5f4;
+
+    color:var(--text);
+
+}
+
+/*=========================
+        SOBRE
+=========================*/
+
+.versao{
+
+    font-size:12px;
+
+    color:#9ca3af;
+
+    text-align:center;
+
+    padding-top:4px;
+
+}
+
+/*=========================
+      RESPONSIVO
+=========================*/
+
+@media (min-width:768px){
+
+    .top-bar{
+
+        padding-inline:3%;
+
+    }
+
+}

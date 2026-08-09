@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#15803d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<title>QR</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
+<link rel="stylesheet" href="qr.css">
+</head>
+
+<body>
+
+
+
+<header class="top-bar">
+
+    <a href="../perfil/perfil.html" class="profile">
+        <span class="material-symbols-rounded">person</span>
+    </a>
+
+    <div class="app-name">
+        TampAÊ
+    </div>
+
+    <a href="../configura/configuracoes.html" class="settings">
+        <span class="material-symbols-rounded">settings</span>
+    </a>
+
+</header>
+
+<main class="scan-wrap">
+
+    <video id="video" muted playsinline autoplay></video>
+    <canvas id="canvas" style="display:none"></canvas>
+
+    <!-- estado: escaneando -->
+    <div class="scan-overlay" id="scanOverlay">
+
+        <div class="viewfinder">
+            <div class="corner tl"></div>
+            <div class="corner tr"></div>
+            <div class="corner bl"></div>
+            <div class="corner br"></div>
+            <div class="laser"></div>
+        </div>
+
+        <div class="scan-msg">Aponte a câmera para o QR Code da máquina de coleta</div>
+
+    </div>
+
+    <!-- estado: pedindo permissão -->
+    <div class="state-msg" id="statePermissao">
+        <div class="icone"><span class="material-symbols-rounded">photo_camera</span></div>
+        <b>Precisamos da câmera</b>
+        <p>Permita o acesso à câmera para escanear o QR Code da máquina e iniciar a coleta.</p>
+        <button id="btnPedirPermissao">Permitir câmera</button>
+    </div>
+
+    <!-- estado: erro de câmera -->
+    <div class="state-msg" id="stateErro">
+        <div class="icone"><span class="material-symbols-rounded">videocam_off</span></div>
+        <b>Não foi possível acessar a câmera</b>
+        <p id="erroTexto">Verifique as permissões do navegador e tente novamente.</p>
+        <button id="btnTentarNovamente">Tentar novamente</button>
+    </div>
+
+    <!-- estado: conectando -->
+    <div class="state-msg connecting" id="stateConectando">
+        <div class="spinner"></div>
+        <b>Conectando à máquina...</b>
+        <p id="conectandoTexto">Lendo QR Code</p>
+    </div>
+
+    <!-- estado: sessão conectada -->
+    <div class="session" id="sessionView">
+
+        <div class="maquina-tag">
+            <span class="material-symbols-rounded">recycling</span>
+            <span id="maquinaNome">Máquina conectada</span>
+        </div>
+
+        <div class="timer-ring">
+            <svg viewBox="0 0 100 100">
+                <circle class="bg" cx="50" cy="50" r="44"></circle>
+                <circle class="fg" id="anelTempo" cx="50" cy="50" r="44"></circle>
+            </svg>
+            <div class="tempo">
+                <span id="tempoRestante">02:00</span>
+                <small>restantes</small>
+            </div>
+        </div>
+
+        <div class="instrucao">Deposite suas tampinhas na máquina. A sessão fecha automaticamente quando o tempo acabar.</div>
+
+        <button class="encerrar" id="btnEncerrar">Encerrar sessão agora</button>
+
+    </div>
+
+    <!-- estado: sessão encerrada -->
+    <div class="state-msg closed" id="stateEncerrada">
+        <div class="icone"><span class="material-symbols-rounded">task_alt</span></div>
+        <b id="encerradaTitulo">Sessão encerrada</b>
+        <div class="pontos-ganhos" id="pontosGanhos">+0 pts</div>
+        <p id="encerradaTexto">Suas tampinhas foram contabilizadas.</p>
+        <button id="btnEscanearDeNovo">Escanear outro QR Code</button>
+    </div>
+
+</main>
+
+<nav class="bottom-nav">
+
+    <a href="../inicio/home.html" class="nav-item">
+        <span class="material-symbols-rounded">home</span>
+        <span>Home</span>
+    </a>
+
+    <a href="../mapa/mapa.html" class="nav-item">
+        <span class="material-symbols-rounded">map</span>
+        <span>Mapa</span>
+    </a>
+
+    <a href="../ranking/rank.html" class="nav-item">
+        <span class="material-symbols-rounded">emoji_events</span>
+        <span>Rank</span>
+    </a>
+
+    <a href="../coleta/qr.html" class="nav-item active">
+        <span class="material-symbols-rounded">qr_code_scanner</span>
+        <span>QR</span>
+    </a>
+
+</nav>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="qr.js"></script>
+
+</body>
+</html>

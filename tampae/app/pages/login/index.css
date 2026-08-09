@@ -1,0 +1,563 @@
+/*=========================
+        RESET
+=========================*/
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+    font-family:Arial,Helvetica,sans-serif;
+}
+
+:root{
+
+    --bg:#edf7ef;
+    --surface:#ffffff;
+
+    --primary:#16a34a;
+    --secondary:#22c55e;
+    --dark:#15803d;
+
+    --border:#b7e4c7;
+    --text:#1f2937;
+    --active:#16a34a;
+
+    --danger:#dc2626;
+
+}
+
+html{
+
+    height:100%;
+    -webkit-text-size-adjust:100%;
+
+}
+
+body{
+
+    width:100%;
+    height:100vh;
+
+    background:linear-gradient(180deg,#15803d,#22c55e 55%,#edf7ef 55%);
+
+    display:flex;
+    flex-direction:column;
+
+    overflow:hidden;
+
+}
+
+/*=========================
+      TELA ROLÁVEL
+=========================*/
+
+.tela{
+
+    flex:1;
+
+    min-height:0;
+
+    display:flex;
+    flex-direction:column;
+
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+
+}
+
+/*=========================
+        HERO / LOGO
+=========================*/
+
+.hero{
+
+    flex-shrink:0;
+
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-end;
+
+    gap:12px;
+
+    padding:calc(9% + env(safe-area-inset-top)) 8% 8%;
+
+    color:white;
+
+    text-align:center;
+
+}
+
+.logo-circulo{
+
+    width:clamp(74px,18vw,96px);
+    aspect-ratio:1;
+
+    border-radius:50%;
+
+    background:rgba(255,255,255,.18);
+
+    border:3px solid rgba(255,255,255,.55);
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+}
+
+.logo-circulo span{
+
+    font-size:clamp(38px,9vw,50px);
+
+}
+
+.hero .titulo{
+
+    font-size:clamp(26px,7vw,34px);
+
+    font-weight:800;
+
+    letter-spacing:.5px;
+
+}
+
+.hero .subtitulo{
+
+    font-size:13.5px;
+
+    opacity:.92;
+
+    max-width:280px;
+
+}
+
+/*=========================
+        CARTÃO
+=========================*/
+
+.cartao{
+
+    flex-shrink:0;
+
+    background:var(--bg);
+
+    border-radius:28px 28px 0 0;
+
+    padding:8% 7% calc(8% + env(safe-area-inset-bottom));
+
+    min-height:56vh;
+
+    display:flex;
+    flex-direction:column;
+
+    gap:20px;
+
+}
+
+/*=========================
+      SELETOR DE ABAS
+=========================*/
+
+.abas{
+
+    display:flex;
+
+    background:white;
+
+    border-radius:999px;
+
+    padding:5px;
+
+    box-shadow:0 4px 14px rgba(0,0,0,.06);
+
+    flex-shrink:0;
+
+}
+
+.aba{
+
+    flex:1;
+
+    text-align:center;
+
+    padding:11px 0;
+
+    border:none;
+
+    border-radius:999px;
+
+    background:transparent;
+
+    color:#6b7280;
+
+    font-size:14px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+    transition:.25s;
+
+}
+
+.aba.ativa{
+
+    background:linear-gradient(90deg,#15803d,#22c55e);
+
+    color:white;
+
+    box-shadow:0 4px 12px rgba(21,128,61,.3);
+
+}
+
+/*=========================
+        FORMULÁRIOS
+=========================*/
+
+.formulario{
+
+    display:none;
+
+    flex-direction:column;
+
+    gap:14px;
+
+}
+
+.formulario.ativo{
+
+    display:flex;
+
+}
+
+.campo{
+
+    display:flex;
+    flex-direction:column;
+
+    gap:6px;
+
+}
+
+.campo label{
+
+    font-size:12.5px;
+
+    font-weight:700;
+
+    color:#4b5563;
+
+}
+
+.campo .input-wrap{
+
+    position:relative;
+
+    display:flex;
+    align-items:center;
+
+}
+
+.campo .input-wrap span.material-symbols-rounded{
+
+    position:absolute;
+
+    left:14px;
+    top:50%;
+
+    transform:translateY(-50%);
+
+    color:#9ca3af;
+
+    font-size:20px;
+
+    pointer-events:none;
+
+}
+
+.campo input{
+
+    width:100%;
+
+    padding:13px 14px 13px 44px;
+
+    border:1.5px solid var(--border);
+
+    border-radius:13px;
+
+    font-size:14.5px;
+
+    color:var(--text);
+
+    background:white;
+
+    outline:none;
+
+    transition:.2s;
+
+}
+
+.campo input:focus{
+
+    border-color:var(--primary);
+
+    box-shadow:0 0 0 3px rgba(34,197,94,.15);
+
+}
+
+.campo .toggle-senha{
+
+    position:absolute;
+
+    right:12px;
+    top:50%;
+
+    transform:translateY(-50%);
+
+    background:none;
+
+    border:none;
+
+    color:#9ca3af;
+
+    cursor:pointer;
+
+    display:flex;
+
+    padding:4px;
+
+    z-index:2;
+
+}
+
+.campo .toggle-senha span{
+
+    font-size:20px;
+
+}
+
+.campo .erro-msg{
+
+    font-size:11.5px;
+
+    color:var(--danger);
+
+    display:none;
+
+}
+
+.campo.invalido input{
+
+    border-color:var(--danger);
+
+}
+
+.campo.invalido .erro-msg{
+
+    display:block;
+
+}
+
+.esqueci{
+
+    align-self:flex-end;
+
+    background:none;
+
+    border:none;
+
+    color:var(--dark);
+
+    font-size:12.5px;
+
+    font-weight:700;
+
+    cursor:pointer;
+
+    margin-top:-6px;
+
+}
+
+/*=========================
+      BOTÃO PRINCIPAL
+=========================*/
+
+.btn-principal{
+
+    width:100%;
+
+    padding:15px;
+
+    border:none;
+
+    border-radius:14px;
+
+    background:linear-gradient(90deg,#15803d,#22c55e);
+
+    color:white;
+
+    font-size:15px;
+    font-weight:800;
+
+    cursor:pointer;
+
+    box-shadow:0 8px 20px rgba(21,128,61,.32);
+
+    display:flex;
+    align-items:center;
+    justify-content:center;
+
+    gap:8px;
+
+}
+
+.btn-principal:active{
+
+    transform:scale(.98);
+
+}
+
+.btn-principal .spinner{
+
+    width:18px;
+    height:18px;
+
+    border-radius:50%;
+
+    border:3px solid rgba(255,255,255,.4);
+    border-top-color:white;
+
+    animation:girar .8s linear infinite;
+
+    display:none;
+
+}
+
+.btn-principal.carregando .spinner{
+
+    display:block;
+
+}
+
+.btn-principal.carregando .texto-btn{
+
+    display:none;
+
+}
+
+@keyframes girar{
+
+    to{ transform:rotate(360deg); }
+
+}
+
+/*=========================
+      TERMOS (CADASTRO)
+=========================*/
+
+.termos{
+
+    display:flex;
+
+    align-items:flex-start;
+
+    gap:9px;
+
+    font-size:12px;
+
+    color:#6b7280;
+
+    line-height:1.4;
+
+}
+
+.termos input{
+
+    margin-top:2px;
+
+    accent-color:var(--primary);
+
+    width:16px;
+    height:16px;
+
+    flex-shrink:0;
+
+}
+
+/*=========================
+      TROCA DE MODO
+=========================*/
+
+.troca-modo{
+
+    text-align:center;
+
+    font-size:13px;
+
+    color:#6b7280;
+
+}
+
+.troca-modo button{
+
+    background:none;
+
+    border:none;
+
+    color:var(--dark);
+
+    font-weight:800;
+
+    font-size:13px;
+
+    cursor:pointer;
+
+}
+
+/*=========================
+      RESPONSIVO
+=========================*/
+
+@media (min-width:768px){
+
+    .cartao{
+
+        max-width:440px;
+
+        align-self:center;
+
+        width:100%;
+
+    }
+
+}
+
+@media (max-height:700px){
+
+    .hero{
+
+        padding-top:calc(6% + env(safe-area-inset-top));
+
+    }
+
+    .logo-circulo{
+
+        width:64px;
+
+    }
+
+    .hero .titulo{
+
+        font-size:24px;
+
+    }
+
+    .hero .subtitulo{
+
+        display:none;
+
+    }
+
+}
