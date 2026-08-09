@@ -3,7 +3,7 @@
   "short_name": "TampAê",
   "description": "Recicle tampinhas, ganhe pontos e participe do TampAê.",
   "lang": "pt-BR",
-  "start_url": "./app/index.html",
+  "start_url": "./app/pages/login/index.html",
   "scope": "./app/",
   "display": "standalone",
   "orientation": "portrait-primary",
