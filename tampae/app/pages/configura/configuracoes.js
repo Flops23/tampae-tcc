@@ -35,7 +35,7 @@ async function changePassword() {
     $("senhaAtual").value = "";
     $("senhaNova").value = "";
     $("senhaConfirma").value = "";
-    $("painelSenha").classList.remove("aberto");
+    $("painelSenha").hidden = true;
     alert("Senha alterada com sucesso.");
 }
 
@@ -55,8 +55,14 @@ async function init() {
         }
     });
 
-    $("itemAlterarSenha")?.addEventListener("click", () => $("painelSenha").classList.toggle("aberto"));
-    $("btnCancelarSenha")?.addEventListener("click", () => $("painelSenha").classList.remove("aberto"));
+    $("itemAlterarSenha")?.addEventListener("click", () => {
+        $("painelSenha").hidden = !$("painelSenha").hidden;
+    });
+
+    $("btnCancelarSenha")?.addEventListener("click", () => {
+        $("painelSenha").hidden = true;
+    });
+
     $("btnSalvarSenha")?.addEventListener("click", changePassword);
 }
 
