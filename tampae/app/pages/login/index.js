@@ -2,6 +2,10 @@ import { supabase } from "../../js/supabase.js";
 
 const formLogin = document.getElementById("formLogin");
 const formCadastro = document.getElementById("formCadastro");
+const abaLogin = document.getElementById("abaLogin");
+const abaCadastro = document.getElementById("abaCadastro");
+const linkParaCadastro = document.getElementById("linkParaCadastro");
+const linkParaLogin = document.getElementById("linkParaLogin");
 
 function mostrarMensagem(mensagem, tipo = "erro") {
     const elemento = document.getElementById("mensagem");
@@ -22,9 +26,41 @@ function setLoading(form, loading) {
     if (!form) return;
     const botao = form.querySelector('button[type="submit"]');
     if (!botao) return;
-    if (!botao.dataset.textoOriginal) botao.dataset.textoOriginal = botao.textContent;
+
+    if (!botao.dataset.textoOriginal) {
+        botao.dataset.textoOriginal = botao.querySelector(".texto-btn")?.textContent || botao.textContent;
+    }
+
     botao.disabled = loading;
-    botao.textContent = loading ? "Aguarde..." : botao.dataset.textoOriginal;
+    botao.classList.toggle("carregando", loading);
+
+    const texto = botao.querySelector(".texto-btn");
+    if (texto) texto.textContent = loading ? "Aguarde..." : botao.dataset.textoOriginal;
+}
+
+function trocarModo(modo) {
+    const cadastro = modo === "cadastro";
+
+    abaLogin?.classList.toggle("ativa", !cadastro);
+    abaCadastro?.classList.toggle("ativa", cadastro);
+    formLogin?.classList.toggle("ativo", !cadastro);
+    formCadastro?.classList.toggle("ativo", cadastro);
+    limparMensagem();
+}
+
+function configurarToggleSenha() {
+    document.querySelectorAll(".toggle-senha").forEach((botao) => {
+        botao.addEventListener("click", () => {
+            const alvo = document.getElementById(botao.dataset.alvo);
+            const icone = botao.querySelector(".material-symbols-rounded");
+            if (!alvo) return;
+
+            const mostrar = alvo.type === "password";
+            alvo.type = mostrar ? "text" : "password";
+            botao.setAttribute("aria-label", mostrar ? "Ocultar senha" : "Mostrar senha");
+            if (icone) icone.textContent = mostrar ? "visibility_off" : "visibility";
+        });
+    });
 }
 
 function validarEmail(email) {
@@ -51,11 +87,17 @@ async function fazerLogin(event) {
     event.preventDefault();
     limparMensagem();
 
-    const email = document.getElementById("email")?.value.trim();
-    const senha = document.getElementById("senha")?.value;
+    const email = document.getElementById("loginEmail")?.value.trim();
+    const senha = document.getElementById("loginSenha")?.value;
 
-    if (!email || !senha) return mostrarMensagem("Preencha o e-mail e a senha.");
-    if (!validarEmail(email)) return mostrarMensagem("Digite um e-mail válido.");
+    if (!email || !senha) {
+        mostrarMensagem("Preencha o e-mail e a senha.");
+        return;
+    }
+    if (!validarEmail(email)) {
+        mostrarMensagem("Digite um e-mail válido.");
+        return;
+    }
 
     setLoading(formLogin, true);
     try {
@@ -80,26 +122,41 @@ async function fazerCadastro(event) {
     event.preventDefault();
     limparMensagem();
 
-    const nome = document.getElementById("nome")?.value.trim();
-    const email = document.getElementById("emailCadastro")?.value.trim();
-    const senha = document.getElementById("senhaCadastro")?.value;
-    const confirmarSenha = document.getElementById("confirmarSenha")?.value;
-    const termos = document.getElementById("termos")?.checked;
+    const nome = document.getElementById("cadastroNome")?.value.trim();
+    const email = document.getElementById("cadastroEmail")?.value.trim();
+    const senha = document.getElementById("cadastroSenha")?.value;
+    const confirmarSenha = document.getElementById("cadastroConfirma")?.value;
+    const termos = document.getElementById("cadastroTermos")?.checked;
 
     if (!nome || !email || !senha || !confirmarSenha) {
-        return mostrarMensagem("Preencha todos os campos do cadastro.");
+        mostrarMensagem("Preencha todos os campos do cadastro.");
+        return;
     }
-    if (!validarEmail(email)) return mostrarMensagem("Digite um e-mail válido.");
-    if (senha.length < 6) return mostrarMensagem("A senha deve ter pelo menos 6 caracteres.");
-    if (senha !== confirmarSenha) return mostrarMensagem("As senhas não coincidem.");
-    if (!termos) return mostrarMensagem("Aceite os termos para continuar.");
+    if (!validarEmail(email)) {
+        mostrarMensagem("Digite um e-mail válido.");
+        return;
+    }
+    if (senha.length < 6) {
+        mostrarMensagem("A senha deve ter pelo menos 6 caracteres.");
+        return;
+    }
+    if (senha !== confirmarSenha) {
+        mostrarMensagem("As senhas não coincidem.");
+        return;
+    }
+    if (!termos) {
+        mostrarMensagem("Aceite os termos para continuar.");
+        return;
+    }
 
     setLoading(formCadastro, true);
     try {
         const { data, error } = await supabase.auth.signUp({
             email,
             password: senha,
-            options: { data: { nome } }
+            options: {
+                data: { nome }
+            }
         });
 
         if (error) {
@@ -125,15 +182,22 @@ async function fazerCadastro(event) {
 
 function traduzirErroAuth(error) {
     const mensagem = (error?.message || "").toLowerCase();
+
     if (mensagem.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
     if (mensagem.includes("email not confirmed")) return "Confirme seu e-mail antes de entrar.";
     if (mensagem.includes("user already registered")) return "Este e-mail já está cadastrado.";
     if (mensagem.includes("password should be at least")) return "A senha precisa ter pelo menos 6 caracteres.";
     if (mensagem.includes("rate limit")) return "Muitas tentativas. Aguarde alguns instantes e tente novamente.";
+
     return error?.message || "Não foi possível concluir a operação.";
 }
 
-if (formLogin) formLogin.addEventListener("submit", fazerLogin);
-if (formCadastro) formCadastro.addEventListener("submit", fazerCadastro);
+abaLogin?.addEventListener("click", () => trocarModo("login"));
+abaCadastro?.addEventListener("click", () => trocarModo("cadastro"));
+linkParaCadastro?.addEventListener("click", () => trocarModo("cadastro"));
+linkParaLogin?.addEventListener("click", () => trocarModo("login"));
+formLogin?.addEventListener("submit", fazerLogin);
+formCadastro?.addEventListener("submit", fazerCadastro);
 
+configurarToggleSenha();
 verificarSessaoExistente();
