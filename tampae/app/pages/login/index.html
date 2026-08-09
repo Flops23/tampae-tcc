@@ -7,128 +7,42 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 <title>Entrar · TampAê</title>
-<link rel="stylesheet" href="index.css">
+<link rel="stylesheet" href="../../css/layout.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
+<link rel="stylesheet" href="index.css">
 </head>
-
 <body>
 <div class="tela">
     <div class="hero">
-        <div class="logo-circulo">
-            <span class="material-symbols-rounded">recycling</span>
-        </div>
+        <div class="logo-circulo"><span class="material-symbols-rounded">recycling</span></div>
         <div class="titulo">TampAÊ</div>
         <div class="subtitulo">Recicle tampinhas, ganhe pontos e suba no ranking</div>
     </div>
-
     <div class="cartao">
         <div class="abas">
             <button type="button" class="aba ativa" id="abaLogin">Entrar</button>
             <button type="button" class="aba" id="abaCadastro">Cadastrar</button>
         </div>
-
         <div id="mensagem" class="mensagem" role="alert" aria-live="polite" hidden></div>
-
-        <!-- ================= LOGIN ================= -->
         <form class="formulario ativo" id="formLogin" novalidate>
-            <div class="campo" id="campoLoginEmail">
-                <label for="loginEmail">E-mail</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">mail</span>
-                    <input type="email" id="loginEmail" placeholder="seuemail@exemplo.com" autocomplete="email">
-                </div>
-                <span class="erro-msg">Digite um e-mail válido.</span>
-            </div>
-
-            <div class="campo" id="campoLoginSenha">
-                <label for="loginSenha">Senha</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">lock</span>
-                    <input type="password" id="loginSenha" placeholder="••••••••" autocomplete="current-password">
-                    <button type="button" class="toggle-senha" data-alvo="loginSenha" aria-label="Mostrar senha">
-                        <span class="material-symbols-rounded">visibility</span>
-                    </button>
-                </div>
-                <span class="erro-msg">Digite sua senha.</span>
-            </div>
-
+            <div class="campo" id="campoLoginEmail"><label for="loginEmail">E-mail</label><div class="input-wrap"><span class="material-symbols-rounded">mail</span><input type="email" id="loginEmail" placeholder="seuemail@exemplo.com" autocomplete="email"></div><span class="erro-msg">Digite um e-mail válido.</span></div>
+            <div class="campo" id="campoLoginSenha"><label for="loginSenha">Senha</label><div class="input-wrap"><span class="material-symbols-rounded">lock</span><input type="password" id="loginSenha" placeholder="••••••••" autocomplete="current-password"><button type="button" class="toggle-senha" data-alvo="loginSenha" aria-label="Mostrar senha"><span class="material-symbols-rounded">visibility</span></button></div><span class="erro-msg">Digite sua senha.</span></div>
             <button type="button" class="esqueci" id="btnEsqueciSenha">Esqueci minha senha</button>
-
-            <button type="submit" class="btn-principal" id="btnLogin">
-                <div class="spinner"></div>
-                <span class="texto-btn">Entrar</span>
-            </button>
-
-            <div class="troca-modo">
-                Ainda não tem conta?
-                <button type="button" id="linkParaCadastro">Cadastre-se</button>
-            </div>
+            <button type="submit" class="btn-principal" id="btnLogin"><div class="spinner"></div><span class="texto-btn">Entrar</span></button>
+            <div class="troca-modo">Ainda não tem conta? <button type="button" id="linkParaCadastro">Cadastre-se</button></div>
         </form>
-
-        <!-- ================= CADASTRO ================= -->
         <form class="formulario" id="formCadastro" novalidate>
-            <div class="campo" id="campoNome">
-                <label for="cadastroNome">Nome completo</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">person</span>
-                    <input type="text" id="cadastroNome" placeholder="Seu nome" autocomplete="name">
-                </div>
-                <span class="erro-msg">Digite seu nome.</span>
-            </div>
-
-            <div class="campo" id="campoCadastroEmail">
-                <label for="cadastroEmail">E-mail</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">mail</span>
-                    <input type="email" id="cadastroEmail" placeholder="seuemail@exemplo.com" autocomplete="email">
-                </div>
-                <span class="erro-msg">Digite um e-mail válido.</span>
-            </div>
-
-            <div class="campo" id="campoCadastroSenha">
-                <label for="cadastroSenha">Senha</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">lock</span>
-                    <input type="password" id="cadastroSenha" placeholder="mínimo 6 caracteres" autocomplete="new-password">
-                    <button type="button" class="toggle-senha" data-alvo="cadastroSenha" aria-label="Mostrar senha">
-                        <span class="material-symbols-rounded">visibility</span>
-                    </button>
-                </div>
-                <span class="erro-msg">A senha precisa ter pelo menos 6 caracteres.</span>
-            </div>
-
-            <div class="campo" id="campoCadastroConfirma">
-                <label for="cadastroConfirma">Confirmar senha</label>
-                <div class="input-wrap">
-                    <span class="material-symbols-rounded">lock</span>
-                    <input type="password" id="cadastroConfirma" placeholder="••••••••" autocomplete="new-password">
-                    <button type="button" class="toggle-senha" data-alvo="cadastroConfirma" aria-label="Mostrar senha">
-                        <span class="material-symbols-rounded">visibility</span>
-                    </button>
-                </div>
-                <span class="erro-msg">As senhas não coincidem.</span>
-            </div>
-
-            <label class="termos" for="cadastroTermos">
-                <input type="checkbox" id="cadastroTermos">
-                Li e aceito os termos de uso e a política de privacidade do TampAê.
-            </label>
-
-            <button type="submit" class="btn-principal" id="btnCadastro">
-                <div class="spinner"></div>
-                <span class="texto-btn">Criar conta</span>
-            </button>
-
-            <div class="troca-modo">
-                Já tem conta?
-                <button type="button" id="linkParaLogin">Entrar</button>
-            </div>
+            <div class="campo" id="campoNome"><label for="cadastroNome">Nome completo</label><div class="input-wrap"><span class="material-symbols-rounded">person</span><input type="text" id="cadastroNome" placeholder="Seu nome" autocomplete="name"></div><span class="erro-msg">Digite seu nome.</span></div>
+            <div class="campo" id="campoCadastroEmail"><label for="cadastroEmail">E-mail</label><div class="input-wrap"><span class="material-symbols-rounded">mail</span><input type="email" id="cadastroEmail" placeholder="seuemail@exemplo.com" autocomplete="email"></div><span class="erro-msg">Digite um e-mail válido.</span></div>
+            <div class="campo" id="campoCadastroSenha"><label for="cadastroSenha">Senha</label><div class="input-wrap"><span class="material-symbols-rounded">lock</span><input type="password" id="cadastroSenha" placeholder="mínimo 6 caracteres" autocomplete="new-password"><button type="button" class="toggle-senha" data-alvo="cadastroSenha" aria-label="Mostrar senha"><span class="material-symbols-rounded">visibility</span></button></div><span class="erro-msg">A senha precisa ter pelo menos 6 caracteres.</span></div>
+            <div class="campo" id="campoCadastroConfirma"><label for="cadastroConfirma">Confirmar senha</label><div class="input-wrap"><span class="material-symbols-rounded">lock</span><input type="password" id="cadastroConfirma" placeholder="••••••••" autocomplete="new-password"><button type="button" class="toggle-senha" data-alvo="cadastroConfirma" aria-label="Mostrar senha"><span class="material-symbols-rounded">visibility</span></button></div><span class="erro-msg">As senhas não coincidem.</span></div>
+            <label class="termos" for="cadastroTermos"><input type="checkbox" id="cadastroTermos">Li e aceito os termos de uso e a política de privacidade do TampAê.</label>
+            <button type="submit" class="btn-principal" id="btnCadastro"><div class="spinner"></div><span class="texto-btn">Criar conta</span></button>
+            <div class="troca-modo">Já tem conta? <button type="button" id="linkParaLogin">Entrar</button></div>
         </form>
     </div>
 </div>
-
 <script type="module" src="index.js"></script>
 </body>
 </html>
