@@ -187,11 +187,11 @@ async function checkSessionState() {
         return;
     }
     if (!data || data.status === "concluida") {
-        await finishFromServer("Sessão encerrada");
+        await finishFromServer("Sessão encerrada", false);
         return;
     }
     if (new Date(data.expira_em).getTime() <= Date.now()) {
-        await finishFromServer("Sessão expirada");
+        await finishFromServer("Sessão expirada", true);
     }
 }
 
@@ -207,7 +207,7 @@ async function getSessionPoints() {
     return (data || []).reduce((sum, row) => sum + Number(row.pontos || 0), 0);
 }
 
-async function finishFromServer(title) {
+async function finishFromServer(title, requestClose = true) {
     if (!currentSession?.id) {
         showClosed(title, "+0 pts", "A sessão foi encerrada.");
         return;
@@ -216,15 +216,21 @@ async function finishFromServer(title) {
     clearInterval(sessionTimer);
     stopSessionWatcher();
 
-    const { data, error } = await supabase.rpc("encerrar_sessao_usuario", {
-        p_session_id: sessionBeforeClose.id
-    });
-
     let points = 0;
-    if (!error && data) {
-        const row = Array.isArray(data) ? data[0] : data;
-        points = Number(row?.pontos_sessao || 0);
-    } else {
+    let closeError = null;
+
+    if (requestClose) {
+        const { data, error } = await supabase.rpc("encerrar_sessao_usuario", {
+            p_session_id: sessionBeforeClose.id
+        });
+        closeError = error;
+        if (!error && data) {
+            const row = Array.isArray(data) ? data[0] : data;
+            points = Number(row?.pontos_sessao || 0);
+        }
+    }
+
+    if (closeError || !requestClose) {
         const { data: fallback } = await supabase
             .from("collections")
             .select("pontos")
@@ -259,24 +265,7 @@ async function init() {
     $("btnPedirPermissao")?.addEventListener("click", startCamera);
     $("btnTentarNovamente")?.addEventListener("click", startCamera);
     $("btnEscanearDeNovo")?.addEventListener("click", startCamera);
-    $("btnEncerrar")?.addEventListener("click", async () => {
-        if (!currentSession?.id) {
-            showClosed("Sessão encerrada", "+0 pts", "A sessão já não está ativa.");
-            return;
-        }
-        const { data, error } = await supabase.rpc("encerrar_sessao_usuario", { p_session_id: currentSession.id });
-        if (error) {
-            console.error(error);
-            $("encerradaTexto").textContent = "Não foi possível encerrar a sessão. Tente novamente.";
-            return;
-        }
-        const row = Array.isArray(data) ? data[0] : data;
-        const points = Number(row?.pontos_sessao || 0);
-        currentSession = null;
-        clearInterval(sessionTimer);
-        stopSessionWatcher();
-        showClosed("Sessão encerrada", `+${points} pts`, points > 0 ? "Sessão encerrada. Seus pontos foram contabilizados." : "Sessão encerrada. Nenhuma coleta foi registrada.");
-    });
+    $("btnEncerrar")?.addEventListener("click", () => finishFromServer("Sessão encerrada", true));
     showState("statePermissao");
 }
 
