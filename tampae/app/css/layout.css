@@ -1,87 +1,54 @@
-/* TampAÊ — layout base compartilhado
-   Padroniza espaçamentos, alinhamentos e áreas estruturais sem alterar a identidade visual das páginas. */
+/* TampAÊ — base CSS compartilhado
+   Regras globais e tokens. Os estilos visuais específicos continuam
+   nas folhas de cada página. */
 
 :root {
+  --bg: #edf7ef;
+  --surface: #ffffff;
+  --primary: #16a34a;
+  --secondary: #22c55e;
+  --dark: #15803d;
+  --border: #b7e4c7;
+  --text: #1f2937;
+  --active: #16a34a;
   --layout-max: 600px;
-  --layout-gutter: clamp(16px, 5vw, 32px);
+  --layout-gutter: clamp(12px, 5vw, 32px);
   --layout-gap: 16px;
-  --layout-radius: 18px;
-  --nav-height: 72px;
+  --nav-margem-extra: 40px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html {
   min-height: 100%;
+  height: 100%;
   text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
   min-width: 320px;
-  min-height: 100dvh;
 }
 
-/* Barras superiores: mesma altura e eixo vertical em todas as telas. */
-.top-bar {
-  min-height: 76px;
-  height: 76px;
-  max-height: 76px;
-  padding: env(safe-area-inset-top) var(--layout-gutter) 0 !important;
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  max-width: 100%;
 }
 
-.top-bar > * {
-  flex-shrink: 0;
+a {
+  color: inherit;
 }
 
-.top-bar .app-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.15;
-}
-
-/* Conteúdo principal: largura, margens e espaçamento previsíveis. */
-.content {
-  width: 100%;
-  max-width: var(--layout-max);
-  margin-inline: auto;
-  padding: 24px var(--layout-gutter) 32px !important;
-  gap: var(--layout-gap) !important;
-}
-
-.content > * {
-  flex-shrink: 0;
-}
-
-/* Cartões e blocos que usam largura total da tela. */
-.card-lista,
-.painel-senha,
-.greeting,
-.stats-grid,
-.event-banner,
-.achievement-card,
-.quick-action,
-.grafico-box,
-.secao {
-  width: 100%;
-  max-width: var(--layout-max);
-  margin-inline: auto;
-}
-
-/* Barra inferior: altura única e respeito ao safe-area. */
-.bottom-nav {
-  height: calc(var(--nav-height) + env(safe-area-inset-bottom));
-  min-height: calc(var(--nav-height) + env(safe-area-inset-bottom));
-  max-height: calc(var(--nav-height) + env(safe-area-inset-bottom));
-  padding-bottom: env(safe-area-inset-bottom) !important;
-}
-
-.nav-item {
-  min-width: 0;
-  min-height: 0;
-}
-
-/* Controles interativos mantêm foco visível e não deslocam o layout. */
 button,
 a,
 input,
@@ -99,47 +66,28 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-/* Página de mapa não usa .content, então recebe o mesmo padrão estrutural. */
-.map-wrap {
-  width: 100%;
-  min-width: 0;
-  min-height: 0;
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
-/* Formulários: evita estouro horizontal em telas pequenas. */
+/* Evita estouro horizontal em componentes flexíveis. */
+.content,
+.tela,
+.formulario,
 .campo,
 .input-wrap,
-.formulario,
-.termos {
+.termos,
+.info,
+.texto {
   min-width: 0;
-}
-
-input,
-button,
-select,
-textarea {
-  max-width: 100%;
 }
 
 @media (min-width: 768px) {
   :root {
     --layout-gutter: 24px;
-  }
-
-  .content {
-    padding-top: 28px !important;
-    padding-bottom: 36px !important;
-  }
-}
-
-@media (max-width: 360px) {
-  :root {
-    --layout-gutter: 12px;
-    --layout-gap: 14px;
-  }
-
-  .top-bar {
-    padding-inline: 12px !important;
   }
 }
 
