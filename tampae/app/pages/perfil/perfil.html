@@ -7,117 +7,44 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 <title>Perfil</title>
-
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="perfil.css">
-
 </head>
-
 <body>
-
-
-
 <header class="top-bar">
-
-    <a href="../inicio/home.html" class="back-btn">
-        <span class="material-symbols-rounded">arrow_back</span>
-    </a>
-
-    <div class="app-name">
-        Perfil
-    </div>
-
-    <a href="../configura/configuracoes.html" class="settings">
-        <span class="material-symbols-rounded">settings</span>
-    </a>
-
+    <a href="../inicio/home.html" class="back-btn"><span class="material-symbols-rounded">arrow_back</span></a>
+    <div class="app-name">Perfil</div>
+    <a href="../configura/configuracoes.html" class="settings"><span class="material-symbols-rounded">settings</span></a>
 </header>
-
 <main class="content">
-
     <div class="perfil-header">
-
         <div class="avatar-grande-wrap">
             <div class="avatar-grande" id="avatarIniciais">--</div>
-            <button class="avatar-editar" id="btnEditarFoto">
-                <span class="material-symbols-rounded">photo_camera</span>
-            </button>
+            <button class="avatar-editar" id="btnEditarFoto" type="button"><span class="material-symbols-rounded">photo_camera</span></button>
         </div>
-
         <div class="nome" id="perfilNome">Carregando...</div>
         <div class="email" id="perfilEmail">—</div>
-        <div class="desde">
-            <span class="material-symbols-rounded">calendar_today</span>
-            <span id="perfilDesde">membro desde —</span>
-        </div>
-
+        <div class="desde"><span class="material-symbols-rounded">calendar_today</span><span id="perfilDesde">membro desde —</span></div>
     </div>
-
     <div class="stats-grid">
-
-        <div class="stat-card">
-            <div class="icone"><span class="material-symbols-rounded">bolt</span></div>
-            <div class="valor" id="statPontos">0</div>
-            <div class="rotulo">Pontos</div>
-        </div>
-
-        <div class="stat-card">
-            <div class="icone"><span class="material-symbols-rounded">recycling</span></div>
-            <div class="valor" id="statTampinhas">0</div>
-            <div class="rotulo">Tampinhas</div>
-        </div>
-
-        <div class="stat-card">
-            <div class="icone"><span class="material-symbols-rounded">scale</span></div>
-            <div class="valor" id="statPeso">0 kg</div>
-            <div class="rotulo">Peso total</div>
-        </div>
-
+        <div class="stat-card"><div class="icone"><span class="material-symbols-rounded">bolt</span></div><div class="valor" id="statPontos">0</div><div class="rotulo">Pontos</div></div>
+        <div class="stat-card"><div class="icone"><span class="material-symbols-rounded">recycling</span></div><div class="valor" id="statTampinhas">0</div><div class="rotulo">Tampinhas</div></div>
+        <div class="stat-card"><div class="icone"><span class="material-symbols-rounded">scale</span></div><div class="valor" id="statPeso">0 kg</div><div class="rotulo">Peso total</div></div>
     </div>
-
     <div class="secao">
-
-        <div class="titulo-secao">
-            <b>Conquistas</b>
-            <span class="contagem" id="conquistasContagem">0/0</span>
-        </div>
-
+        <div class="titulo-secao"><b>Conquistas</b><span class="contagem" id="conquistasContagem">0/0</span></div>
         <div class="conquistas-scroll" id="conquistasLista"></div>
-
     </div>
-
     <div class="secao">
-
-        <div class="titulo-secao">
-            <b>Histórico de coletas</b>
-            <span class="contagem">últimas 5</span>
-        </div>
-
+        <div class="titulo-secao"><b>Histórico de coletas</b><span class="contagem">últimas 5</span></div>
         <div class="historico-lista" id="historicoLista"></div>
-
     </div>
-
     <div class="acoes">
-
-        <button class="acao-btn">
-            <span class="material-symbols-rounded">edit</span>
-            Editar perfil
-            <span class="material-symbols-rounded seta">chevron_right</span>
-        </button>
-
-        <a href="../configura/configuracoes.html" class="acao-btn">
-            <span class="material-symbols-rounded">settings</span>
-            Configurações
-            <span class="material-symbols-rounded seta">chevron_right</span>
-        </a>
-
+        <button class="acao-btn" id="btnEditarPerfil" type="button"><span class="material-symbols-rounded">edit</span>Editar perfil<span class="material-symbols-rounded seta">chevron_right</span></button>
+        <a href="../configura/configuracoes.html" class="acao-btn"><span class="material-symbols-rounded">settings</span>Configurações<span class="material-symbols-rounded seta">chevron_right</span></a>
     </div>
-
 </main>
-
-<script src="perfil.js"></script>
-
+<script type="module" src="perfil.js"></script>
 </body>
 </html>
