@@ -7,137 +7,40 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 <title>Configurações</title>
-
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="configuracoes.css">
-
-
 </head>
-
 <body>
-
-
-
 <header class="top-bar">
-
-    <a href="../inicio/home.html" class="back-btn">
-        <span class="material-symbols-rounded">arrow_back</span>
-    </a>
-
+    <a href="../inicio/home.html" class="back-btn"><span class="material-symbols-rounded">arrow_back</span></a>
     <div class="app-name">Configurações</div>
-
 </header>
-
 <main class="content">
-
     <div class="secao">
-
         <div class="secao-titulo">Preferências</div>
-
         <div class="card-lista">
-
-            <div class="item">
-                <div class="icone"><span class="material-symbols-rounded">volume_up</span></div>
-                <div class="texto">
-                    <b>Sons do app</b>
-                    <small>Efeitos ao coletar e ganhar pontos</small>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="toggleSom" checked>
-                    <span class="trilho"></span>
-                </label>
-            </div>
-
-            <div class="item">
-                <div class="icone"><span class="material-symbols-rounded">vibration</span></div>
-                <div class="texto">
-                    <b>Vibração</b>
-                    <small>Vibrar ao concluir uma coleta</small>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="toggleVibracao" checked>
-                    <span class="trilho"></span>
-                </label>
-            </div>
-
-            <div class="item">
-                <div class="icone"><span class="material-symbols-rounded">notifications</span></div>
-                <div class="texto">
-                    <b>Avisos no app</b>
-                    <small>Alertas de conquistas e eventos ativos</small>
-                </div>
-                <label class="toggle">
-                    <input type="checkbox" id="toggleAvisos" checked>
-                    <span class="trilho"></span>
-                </label>
-            </div>
-
+            <div class="item"><div class="icone"><span class="material-symbols-rounded">volume_up</span></div><div class="texto"><b>Sons do app</b><small>Efeitos ao coletar e ganhar pontos</small></div><label class="toggle"><input type="checkbox" id="toggleSom" checked><span class="trilho"></span></label></div>
+            <div class="item"><div class="icone"><span class="material-symbols-rounded">vibration</span></div><div class="texto"><b>Vibração</b><small>Vibrar ao concluir uma coleta</small></div><label class="toggle"><input type="checkbox" id="toggleVibracao" checked><span class="trilho"></span></label></div>
+            <div class="item"><div class="icone"><span class="material-symbols-rounded">notifications</span></div><div class="texto"><b>Avisos no app</b><small>Alertas de conquistas e eventos ativos</small></div><label class="toggle"><input type="checkbox" id="toggleAvisos" checked><span class="trilho"></span></label></div>
         </div>
-
     </div>
-
     <div class="secao">
-
         <div class="secao-titulo">Conta</div>
-
         <div class="card-lista">
-
-            <div class="item clicavel" id="itemAlterarSenha">
-                <div class="icone"><span class="material-symbols-rounded">lock</span></div>
-                <div class="texto">
-                    <b>Alterar senha</b>
-                    <small>Atualize sua senha de acesso</small>
-                </div>
-                <span class="material-symbols-rounded seta">chevron_right</span>
-            </div>
-
-            <div class="item sair clicavel" id="itemSair">
-                <div class="icone"><span class="material-symbols-rounded">logout</span></div>
-                <div class="texto">
-                    <b>Sair da conta</b>
-                    <small>Encerrar sessão neste dispositivo</small>
-                </div>
-            </div>
-
+            <div class="item clicavel" id="itemAlterarSenha"><div class="icone"><span class="material-symbols-rounded">lock</span></div><div class="texto"><b>Alterar senha</b><small>Atualize sua senha de acesso</small></div><span class="material-symbols-rounded seta">chevron_right</span></div>
+            <div class="item sair clicavel" id="itemSair"><div class="icone"><span class="material-symbols-rounded">logout</span></div><div class="texto"><b>Sair da conta</b><small>Encerrar sessão neste dispositivo</small></div></div>
         </div>
-
     </div>
-
-    <div class="painel-senha" id="painelSenha">
-
+    <div class="painel-senha" id="painelSenha" hidden>
         <b>Alterar senha</b>
-
-        <div class="campo">
-            <label>Senha atual</label>
-            <input type="password" id="senhaAtual" placeholder="••••••••">
-        </div>
-
-        <div class="campo">
-            <label>Nova senha</label>
-            <input type="password" id="senhaNova" placeholder="••••••••">
-        </div>
-
-        <div class="campo">
-            <label>Confirmar nova senha</label>
-            <input type="password" id="senhaConfirma" placeholder="••••••••">
-        </div>
-
-        <div class="acoes-form">
-            <button class="btn-cancelar" id="btnCancelarSenha">Cancelar</button>
-            <button class="btn-salvar" id="btnSalvarSenha">Salvar</button>
-        </div>
-
+        <div class="campo"><label>Senha atual</label><input type="password" id="senhaAtual" placeholder="••••••••" autocomplete="current-password"></div>
+        <div class="campo"><label>Nova senha</label><input type="password" id="senhaNova" placeholder="••••••••" autocomplete="new-password"></div>
+        <div class="campo"><label>Confirmar nova senha</label><input type="password" id="senhaConfirma" placeholder="••••••••" autocomplete="new-password"></div>
+        <div class="acoes-form"><button class="btn-cancelar" id="btnCancelarSenha" type="button">Cancelar</button><button class="btn-salvar" id="btnSalvarSenha" type="button">Salvar</button></div>
     </div>
-
-    <div class="secao">
-        <div class="versao">TampAê · versão 0.1 (MVP)</div>
-    </div>
-
+    <div class="secao"><div class="versao">TampAê · versão 0.1 (MVP)</div></div>
 </main>
- <script src="configuracoes.js"></script>
-
-
+<script type="module" src="configuracoes.js"></script>
 </body>
 </html>
