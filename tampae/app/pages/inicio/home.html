@@ -8,48 +8,39 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-<title>Home</title>
+<title>TampAÊ — Início</title>
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="home.css">
-
 </head>
 
 <body>
 
-
-
 <header class="top-bar">
-
-    <a href="../perfil/perfil.html" class="profile">
-        <!-- <img src="perfil.jpg" alt="Perfil"> -->
+    <a href="../perfil/perfil.html" class="profile" aria-label="Abrir perfil">
         <span class="material-symbols-rounded">person</span>
     </a>
 
-    <div class="app-name">
-        TampAÊ
-    </div>
+    <div class="app-name">TampAÊ</div>
 
-    <a href="../configura/configuracoes.html" class="settings">
+    <a href="../configura/configuracoes.html" class="settings" aria-label="Configurações">
         <span class="material-symbols-rounded">settings</span>
     </a>
-
 </header>
 
 <main class="content">
 
     <div class="greeting">
         <div class="ola">Olá, bem-vindo(a) de volta 👋</div>
-        <div class="nome" id="saudacaoNome">Rafael</div>
+        <div class="nome" id="saudacaoNome">Carregando...</div>
     </div>
 
-    <div class="status-circle">
+    <div class="status-circle" aria-label="Pontos totais">
         <span class="valor" id="pontosTotais">0</span>
         <span class="label">pontos totais</span>
     </div>
 
     <div class="stats-grid">
-
         <div class="stat-card">
             <div class="icone"><span class="material-symbols-rounded">recycling</span></div>
             <div class="valor" id="statTampinhas">0</div>
@@ -67,34 +58,31 @@
             <div class="valor" id="statPosicao">—</div>
             <div class="rotulo">No ranking</div>
         </div>
-
     </div>
 
-    <a href="../ranking/rank.html" class="event-banner">
+    <a href="../ranking/rank.html" class="event-banner" aria-label="Abrir ranking">
         <div class="icone"><span class="material-symbols-rounded">celebration</span></div>
         <div class="info">
-            <div class="tag">Evento em andamento</div>
-            <div class="titulo" id="eventoNome">Semana do Meio Ambiente</div>
-            <div class="sub" id="eventoData">até 21/06 · veja o ranking</div>
+            <div class="tag" id="eventoTag">Ranking</div>
+            <div class="titulo" id="eventoNome">Acompanhe sua evolução</div>
+            <div class="sub" id="eventoData">Veja sua posição no ranking</div>
         </div>
         <div class="seta"><span class="material-symbols-rounded">chevron_right</span></div>
     </a>
 
     <div class="achievement-card">
-
         <div class="topo">
             <div class="icone"><span class="material-symbols-rounded">military_tech</span></div>
             <div class="texto">
-                <b id="conquistaNome">Próxima conquista</b>
-                <small id="conquistaDescricao">Carregando...</small>
+                <b id="conquistaNome">Conquistas</b>
+                <small id="conquistaDescricao">As metas aparecerão aqui quando estiverem disponíveis.</small>
             </div>
-            <div class="contagem" id="conquistaContagem">0/0</div>
+            <div class="contagem" id="conquistaContagem">—</div>
         </div>
 
         <div class="progress-bar">
             <div class="fill" id="conquistaBarra" style="width:0%"></div>
         </div>
-
     </div>
 
     <a href="../coleta/qr.html" class="quick-action">
@@ -105,15 +93,17 @@
     <div class="grafico-box">
         <div class="titulo">Evolução de pontos</div>
         <div class="canvas-wrap">
-            <canvas id="grafico"></canvas>
+            <canvas id="grafico" aria-label="Gráfico de evolução de pontos"></canvas>
+            <div id="graficoVazio" class="grafico-vazio" hidden>
+                Ainda não há histórico suficiente para mostrar a evolução.
+            </div>
         </div>
     </div>
 
 </main>
 
-<nav class="bottom-nav">
-
-    <a href="../inicio/home.html" class="nav-item">
+<nav class="bottom-nav" aria-label="Navegação principal">
+    <a href="../inicio/home.html" class="nav-item active" aria-current="page">
         <span class="material-symbols-rounded">home</span>
         <span>Home</span>
     </a>
@@ -128,15 +118,13 @@
         <span>Rank</span>
     </a>
 
-    <a href="../coleta/qr.html" class="nav-item active">
+    <a href="../coleta/qr.html" class="nav-item">
         <span class="material-symbols-rounded">qr_code_scanner</span>
         <span>QR</span>
     </a>
-
 </nav>
 
-
-</body>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="home.js"></script>
+<script type="module" src="home.js"></script>
+</body>
 </html>
