@@ -1,8 +1,9 @@
-const CACHE_NAME = "tampae-app-v5";
+const CACHE_NAME = "tampae-app-v6";
 
 const APP_SHELL = [
-  "./app/",
-  "./app/index.html",
+  "./app/pages/login/index.html",
+  "./app/pages/login/index.css",
+  "./app/pages/login/index.js",
   "./app/img/icon-192.png",
   "./app/img/icon-512.png",
   "./app/img/icon-maskable-512.png"
@@ -32,18 +33,14 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // O Service Worker do PWA controla somente a aplicação.
-  // A apresentação em /tampae/index.html fica fora do escopo do app.
-  if (url.origin !== self.location.origin || request.method !== "GET") {
-    return;
-  }
+  if (url.origin !== self.location.origin || request.method !== "GET") return;
 
-  // Não interceptar chamadas ao Supabase/API ou recursos externos.
-  if (url.pathname.includes("/supabase/") || url.hostname !== self.location.hostname) {
-    return;
-  }
+  // O Service Worker só controla URLs dentro de /tampae/app/.
+  if (!url.pathname.includes("/tampae/app/")) return;
 
-  // O app usa rede primeiro para receber atualizações imediatamente.
+  // Supabase e APIs externas não devem passar pelo cache do PWA.
+  if (url.hostname !== self.location.hostname) return;
+
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -54,7 +51,10 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() =>
-        caches.match(request).then((cached) => cached || caches.match("./app/index.html"))
+        caches.match(request).then((cached) => {
+          if (cached) return cached;
+          return caches.match("./app/pages/login/index.html");
+        })
       )
   );
 });
