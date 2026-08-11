@@ -2,6 +2,7 @@ import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
 const $ = (id) => document.getElementById(id);
+const AVATAR_BUCKET = "avatars";
 
 function formatNumber(value) {
     return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
@@ -17,7 +18,7 @@ function formatWeight(grams) {
 async function loadProfile(user) {
     const { data: profile, error } = await supabase
         .from("profiles")
-        .select("nome,pontos_totais,peso_total_gramas,tampinhas_totais,foto_url")
+        .select("nome,pontos_totais,peso_total_gramas,tampinhas_totais,foto_path")
         .eq("id", user.id)
         .maybeSingle();
     if (error) throw error;
@@ -28,9 +29,15 @@ async function loadProfile(user) {
     $("statTampinhas").textContent = formatNumber(profile.tampinhas_totais);
     $("statPeso").textContent = formatWeight(profile.peso_total_gramas);
 
-    if (profile.foto_url) {
+    if (profile.foto_path) {
+        const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(profile.foto_path);
         const link = document.querySelector(".profile");
-        if (link) link.innerHTML = `<img src="${escapeHtml(profile.foto_url)}" alt="Foto de perfil">`;
+        if (link && data?.publicUrl) {
+            const img = document.createElement("img");
+            img.src = `${data.publicUrl}?v=${Date.now()}`;
+            img.alt = "Foto de perfil";
+            link.replaceChildren(img);
+        }
     }
 }
 
