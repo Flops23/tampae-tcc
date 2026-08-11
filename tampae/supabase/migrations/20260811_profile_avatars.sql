@@ -1,0 +1,54 @@
+-- Fotos de perfil no Supabase Storage.
+-- O banco guarda apenas o caminho do arquivo.
+
+alter table public.profiles
+    add column if not exists foto_path text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+    'avatars',
+    'avatars',
+    true,
+    5242880,
+    array['image/jpeg', 'image/png', 'image/webp']::text[]
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- Cada usuário só pode gravar, alterar e excluir arquivos dentro da própria pasta:
+-- avatars/<auth.uid()>/...
+create policy "Usuários podem enviar a própria foto"
+on storage.objects
+for insert
+to authenticated
+with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = (select auth.uid()::text)
+);
+
+create policy "Usuários podem atualizar a própria foto"
+on storage.objects
+for update
+using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = (select auth.uid()::text)
+)
+with check (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = (select auth.uid()::text)
+);
+
+create policy "Usuários podem excluir a própria foto"
+on storage.objects
+for delete
+ to authenticated
+using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = (select auth.uid()::text)
+);
