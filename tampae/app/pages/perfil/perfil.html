@@ -20,7 +20,11 @@
 </header>
 <main class="content">
     <div class="perfil-header">
-        <div class="avatar-grande-wrap"><div class="avatar-grande" id="avatarIniciais">--</div><button class="avatar-editar" id="btnEditarFoto" type="button"><span class="material-symbols-rounded">photo_camera</span></button></div>
+        <div class="avatar-grande-wrap">
+            <div class="avatar-grande" id="avatarIniciais" aria-label="Foto de perfil">--</div>
+            <button class="avatar-editar" id="btnEditarFoto" type="button" aria-label="Alterar foto de perfil"><span class="material-symbols-rounded">photo_camera</span></button>
+            <input id="inputFotoPerfil" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        </div>
         <div class="nome" id="perfilNome">Carregando...</div>
         <div class="email" id="perfilEmail">—</div>
         <div class="desde"><span class="material-symbols-rounded">calendar_today</span><span id="perfilDesde">membro desde —</span></div>
