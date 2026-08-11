@@ -2,6 +2,10 @@ import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
 const $ = (id) => document.getElementById(id);
+const AVATAR_BUCKET = "avatars";
+const MAX_INPUT_SIZE = 10 * 1024 * 1024;
+const MAX_OUTPUT_SIZE = 350 * 1024;
+const AVATAR_SIZE = 512;
 
 async function init() {
     const user = await requireAuth();
@@ -12,7 +16,7 @@ async function init() {
 
     const { data: profile, error } = await supabase
         .from("profiles")
-        .select("id,nome,foto_url,pontos_totais,tampinhas_totais,peso_total_gramas")
+        .select("id,nome,foto_path,pontos_totais,tampinhas_totais,peso_total_gramas")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -24,12 +28,12 @@ async function init() {
     renderProfile(profile);
     await Promise.all([loadAchievements(user.id), loadHistory(user.id)]);
 
-    $("btnEditarFoto")?.addEventListener("click", async () => {
-        const url = window.prompt("URL da sua foto de perfil (deixe vazio para remover):", profile.foto_url ?? "");
-        if (url === null) return;
-        const { error: updateError } = await supabase.from("profiles").update({ foto_url: url.trim() || null }).eq("id", user.id);
-        if (updateError) return alert("Não foi possível atualizar a foto.");
-        window.location.reload();
+    $("btnEditarFoto")?.addEventListener("click", () => $("inputFotoPerfil")?.click());
+    $("inputFotoPerfil")?.addEventListener("change", async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        await updateProfilePhoto(user, profile, file);
     });
 
     $("btnEditarPerfil")?.addEventListener("click", async () => {
@@ -43,19 +47,110 @@ async function init() {
     });
 }
 
+async function updateProfilePhoto(user, profile, file) {
+    if (!file.type.startsWith("image/")) return alert("Selecione uma imagem válida.");
+    if (file.size > MAX_INPUT_SIZE) return alert("A imagem original deve ter no máximo 10 MB.");
+
+    try {
+        const blob = await compressImage(file);
+        const path = `avatars/${user.id}/profile.webp`;
+
+        const { error: uploadError } = await supabase.storage
+            .from(AVATAR_BUCKET)
+            .upload(path, blob, {
+                contentType: "image/webp",
+                cacheControl: "3600",
+                upsert: true
+            });
+
+        if (uploadError) throw uploadError;
+
+        const { error: updateError } = await supabase
+            .from("profiles")
+            .update({ foto_path: path })
+            .eq("id", user.id);
+
+        if (updateError) throw updateError;
+
+        window.location.reload();
+    } catch (error) {
+        console.error("Falha ao salvar foto de perfil:", error);
+        alert("Não foi possível salvar a foto de perfil.");
+    }
+}
+
+async function compressImage(file) {
+    const image = await loadImage(file);
+    let size = Math.min(AVATAR_SIZE, image.naturalWidth, image.naturalHeight);
+    let quality = 0.82;
+    let blob = null;
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const context = canvas.getContext("2d", { alpha: false });
+        if (!context) throw new Error("Canvas não suportado.");
+
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, size, size);
+
+        const scale = Math.max(size / image.naturalWidth, size / image.naturalHeight);
+        const width = image.naturalWidth * scale;
+        const height = image.naturalHeight * scale;
+        const x = (size - width) / 2;
+        const y = (size - height) / 2;
+        context.drawImage(image, x, y, width, height);
+
+        blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+        if (!blob) throw new Error("Não foi possível gerar a imagem.");
+        if (blob.size <= MAX_OUTPUT_SIZE) return blob;
+
+        if (quality > 0.58) {
+            quality -= 0.08;
+        } else {
+            size = Math.max(256, Math.round(size * 0.8));
+            quality = 0.72;
+        }
+    }
+
+    if (!blob || blob.size > MAX_OUTPUT_SIZE) throw new Error("Não foi possível reduzir a imagem ao tamanho permitido.");
+    return blob;
+}
+
+function loadImage(file) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(image);
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("Imagem inválida."));
+        };
+        image.src = url;
+    });
+}
+
 function renderProfile(profile) {
     const nome = profile.nome || "Usuário";
     $("perfilNome").textContent = nome;
     $("avatarIniciais").textContent = initials(nome);
+    $("avatarIniciais").style.backgroundImage = "";
     $("statPontos").textContent = Number(profile.pontos_totais || 0).toLocaleString("pt-BR");
     $("statTampinhas").textContent = Number(profile.tampinhas_totais || 0).toLocaleString("pt-BR");
     $("statPeso").textContent = formatWeight(profile.peso_total_gramas);
 
-    if (profile.foto_url) {
-        $("avatarIniciais").style.backgroundImage = `url("${profile.foto_url.replaceAll('"', '%22')}")`;
-        $("avatarIniciais").style.backgroundSize = "cover";
-        $("avatarIniciais").style.backgroundPosition = "center";
-        $("avatarIniciais").textContent = "";
+    if (profile.foto_path) {
+        const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(profile.foto_path);
+        if (data?.publicUrl) {
+            $("avatarIniciais").style.backgroundImage = `url("${data.publicUrl}?v=${Date.now()}")`;
+            $("avatarIniciais").style.backgroundSize = "cover";
+            $("avatarIniciais").style.backgroundPosition = "center";
+            $("avatarIniciais").textContent = "";
+        }
     }
 }
 
