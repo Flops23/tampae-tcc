@@ -2,9 +2,11 @@ import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
 const $ = (id) => document.getElementById(id);
+const AVATAR_BUCKET = "avatars";
 let eventos = [];
 let eventoAtual = null;
 let usuarioAtualId = null;
+let avatars = new Map();
 
 function formatDate(value) {
     return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
@@ -59,6 +61,38 @@ function corAvatar(nome) {
     return cores[soma % cores.length];
 }
 
+function avatarMarkup(pessoa, extraClass = "") {
+    const path = avatars.get(pessoa.user_id);
+    if (path) {
+        const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+        if (data?.publicUrl) {
+            return `<div class="avatar ${extraClass}" style="background-image:url('${data.publicUrl}?v=${encodeURIComponent(path)}');background-size:cover;background-position:center;background-repeat:no-repeat" aria-label="Foto de ${escapeHtml(pessoa.nome)}"></div>`;
+        }
+    }
+
+    return `<div class="avatar ${extraClass}" style="background:${corAvatar(pessoa.nome)}">${initials(pessoa.nome)}</div>`;
+}
+
+async function loadAvatars(rows) {
+    const ids = [...new Set(rows.map((row) => row.user_id).filter(Boolean))];
+    avatars = new Map();
+    if (!ids.length) return;
+
+    const { data, error } = await supabase
+        .from("profiles")
+        .select("id,foto_path")
+        .in("id", ids);
+
+    if (error) {
+        console.error("Falha ao carregar fotos do ranking:", error);
+        return;
+    }
+
+    for (const profile of data ?? []) {
+        if (profile.foto_path) avatars.set(profile.id, profile.foto_path);
+    }
+}
+
 function renderRanking(rows) {
     const podium = $("podium");
     const list = $("rankList");
@@ -83,7 +117,7 @@ function renderRanking(rows) {
         <div class="podium-item ${classe}">
             <div class="avatar-wrap">
                 ${pos === 1 ? '<span class="material-symbols-rounded crown">workspace_premium</span>' : ''}
-                <div class="avatar" style="background:${corAvatar(pessoa.nome)}">${initials(pessoa.nome)}</div>
+                ${avatarMarkup(pessoa)}
                 <div class="medal">${pos}</div>
             </div>
             <div class="nome">${escapeHtml(pessoa.nome)}</div>
@@ -99,7 +133,7 @@ function renderRanking(rows) {
         return `
             <div class="rank-row ${destaque ? "me" : ""}">
                 <div class="pos">${posicao}º</div>
-                <div class="avatar" style="background:${corAvatar(pessoa.nome)}">${initials(pessoa.nome)}</div>
+                ${avatarMarkup(pessoa)}
                 <div class="nome">
                     ${escapeHtml(pessoa.nome)}
                     ${destaque ? "<small>Você</small>" : ""}
@@ -128,7 +162,9 @@ async function loadRanking() {
         return;
     }
 
-    renderRanking(data ?? []);
+    const rows = data ?? [];
+    await loadAvatars(rows);
+    renderRanking(rows);
 }
 
 async function init() {
