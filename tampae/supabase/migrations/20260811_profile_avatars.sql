@@ -17,8 +17,18 @@ set public = excluded.public,
     file_size_limit = excluded.file_size_limit,
     allowed_mime_types = excluded.allowed_mime_types;
 
--- Cada usuário só pode gravar, alterar e excluir arquivos dentro da própria pasta:
+-- Cada usuário só pode gravar, consultar, alterar e excluir arquivos dentro da própria pasta:
 -- avatars/<auth.uid()>/...
+create policy "Usuários podem consultar a própria foto"
+on storage.objects
+for select
+to authenticated
+using (
+    bucket_id = 'avatars'
+    and (storage.foldername(name))[1] = 'avatars'
+    and (storage.foldername(name))[2] = (select auth.uid()::text)
+);
+
 create policy "Usuários podem enviar a própria foto"
 on storage.objects
 for insert
@@ -32,6 +42,7 @@ with check (
 create policy "Usuários podem atualizar a própria foto"
 on storage.objects
 for update
+to authenticated
 using (
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = 'avatars'
@@ -46,7 +57,7 @@ with check (
 create policy "Usuários podem excluir a própria foto"
 on storage.objects
 for delete
- to authenticated
+to authenticated
 using (
     bucket_id = 'avatars'
     and (storage.foldername(name))[1] = 'avatars'
