@@ -33,7 +33,7 @@ async function init() {
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
-        await updateProfilePhoto(user, profile, file);
+        await updateProfilePhoto(user, file);
     });
 
     $("btnEditarPerfil")?.addEventListener("click", async () => {
@@ -47,13 +47,17 @@ async function init() {
     });
 }
 
-async function updateProfilePhoto(user, profile, file) {
+async function updateProfilePhoto(user, file) {
     if (!file.type.startsWith("image/")) return alert("Selecione uma imagem válida.");
     if (file.size > MAX_INPUT_SIZE) return alert("A imagem original deve ter no máximo 10 MB.");
 
     try {
         const blob = await compressImage(file);
-        const path = `avatars/${user.id}/profile.webp`;
+
+        // O bucket já é definido em .from(AVATAR_BUCKET), portanto o caminho
+        // NÃO deve repetir "avatars/".
+        // Resultado final no Storage: avatars/<user.id>/profile.webp
+        const path = `${user.id}/profile.webp`;
 
         const { error: uploadError } = await supabase.storage
             .from(AVATAR_BUCKET)
