@@ -11,21 +11,19 @@
 // SDA -> GPIO 21
 // SCL -> GPIO 22
 //
-// Objetivo deste primeiro teste:
-// 1. Conectar o ESP32 ao Wi-Fi.
-// 2. Consultar o Supabase periodicamente.
-// 3. Verificar se existe uma sessão ativa para esta máquina.
-// 4. Quando um usuário conectar pelo aplicativo, mostrar o nome
-//    dele no OLED.
+// Baseado diretamente no fluxo da máquina virtual de teste:
+//   sb.rpc("get_active_session", {
+//     p_machine_id: machine.id,
+//     p_device_token: machine.device_token
+//   })
 //
-// Não há sensores, balança, LDR ou botão neste firmware.
+// Neste estágio NÃO há sensores, balança, LDR ou botão.
 // ============================================================
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 #define OLED_ADDRESS 0x3C
-
 #define I2C_SDA 21
 #define I2C_SCL 22
 
@@ -34,19 +32,15 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 // ============================================================
 // CONFIGURAÇÃO
 // ============================================================
-const char* WIFI_SSID = "COLOQUE_SEU_WIFI";
-const char* WIFI_PASSWORD = "COLOQUE_SUA_SENHA";
+const char* WIFI_SSID = "DAYANE";
+const char* WIFI_PASSWORD = "@Felipe23";
 
-const char* SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
-const char* SUPABASE_ANON_KEY = "SUA_CHAVE_ANON_OU_PUBLISHABLE";
+const char* SUPABASE_URL = "https://usztjfxtbagjbnupiuxm.supabase.co";
+const char* SUPABASE_ANON_KEY = "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr";
 
-// ID da máquina cadastrada na tabela machines.
-// Exemplo: "a142ed17-e276-47e0-918f-8d1145b558c0"
-const char* MACHINE_ID = "COLOQUE_O_ID_DA_MAQUINA";
-
-// device_token da mesma máquina.
-// Ele é usado pela RPC get_active_session para autenticar a máquina.
-const char* DEVICE_TOKEN = "COLOQUE_O_DEVICE_TOKEN";
+// Mesmos valores informados para a máquina cadastrada.
+const char* MACHINE_ID = "8076b255-53de-49f0-bb53-69024edcbd23";
+const char* DEVICE_TOKEN = "a4e0a37b-9c1f-4f6b-9e1b-fddc4f4fccfa";
 
 const unsigned long SESSION_POLL_INTERVAL = 1500;
 const unsigned long WIFI_RETRY_INTERVAL = 5000;
@@ -104,8 +98,8 @@ void showConnectedUser(const String& name) {
 // ============================================================
 // WIFI
 // ============================================================
-void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;
+bool connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
 
   oledMessage("TAMPAE", "Conectando Wi-Fi...");
 
@@ -115,50 +109,80 @@ void connectWiFi() {
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
     delay(300);
-    display.print(".");
-    display.display();
+    Serial.print(".");
   }
+  Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Wi-Fi OK. IP: ");
+    Serial.println(WiFi.localIP());
     oledMessage("Wi-Fi conectado", WiFi.localIP().toString());
-    delay(1000);
-  } else {
-    oledMessage("Falha no Wi-Fi", "Tentando novamente...");
+    delay(800);
+    return true;
   }
+
+  Serial.print("Falha Wi-Fi. Status: ");
+  Serial.println(WiFi.status());
+  oledMessage("Falha no Wi-Fi", "Tentando novamente...");
+  return false;
 }
 
 // ============================================================
 // SUPABASE
 // ============================================================
-bool configurationIsValid() {
-  if (String(WIFI_SSID) == "COLOQUE_SEU_WIFI") return false;
-  if (String(SUPABASE_URL).indexOf("SEU-PROJETO") >= 0) return false;
-  if (String(SUPABASE_ANON_KEY) == "SUA_CHAVE_ANON_OU_PUBLISHABLE") return false;
-  if (String(MACHINE_ID) == "COLOQUE_O_ID_DA_MAQUINA") return false;
-  if (String(DEVICE_TOKEN) == "COLOQUE_O_DEVICE_TOKEN") return false;
-  return true;
-}
-
 String getRpcUrl() {
   String base = SUPABASE_URL;
   while (base.endsWith("/")) base.remove(base.length() - 1);
   return base + "/rest/v1/rpc/get_active_session";
 }
 
-bool getActiveSession(String& userName, String& sessionId) {
-  if (WiFi.status() != WL_CONNECTED) return false;
+// Mostra um erro HTTP no OLED e no Serial. Isso é importante para
+// diferenciar falha de autenticação, RPC inexistente, RLS etc.
+void showHttpError(int httpCode, const String& response) {
+  Serial.print("get_active_session HTTP ");
+  Serial.print(httpCode);
+  Serial.print(": ");
+  Serial.println(response);
+
+  String code = String(httpCode);
+  oledMessage("TAMPAE", "ERRO RPC", "HTTP " + code, "Veja Serial");
+}
+
+bool getActiveSession(String& userName, String& sessionId, String& errorInfo) {
+  userName = "";
+  sessionId = "";
+  errorInfo = "";
+
+  if (WiFi.status() != WL_CONNECTED) {
+    errorInfo = "Wi-Fi desconectado";
+    return false;
+  }
 
   HTTPClient http;
   String url = getRpcUrl();
 
+  Serial.println();
+  Serial.println("--- get_active_session ---");
+  Serial.print("URL: ");
+  Serial.println(url);
+  Serial.print("machine_id: ");
+  Serial.println(MACHINE_ID);
+  Serial.print("device_token: ");
+  Serial.println(DEVICE_TOKEN);
+
   if (!http.begin(url)) {
+    errorInfo = "http.begin falhou";
+    Serial.println(errorInfo);
     return false;
   }
 
+  http.setTimeout(10000);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("apikey", SUPABASE_ANON_KEY);
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  http.addHeader("Prefer", "return=representation");
 
+  // EXATAMENTE os mesmos nomes de parâmetros usados pela máquina virtual.
   JsonDocument request;
   request["p_machine_id"] = MACHINE_ID;
   request["p_device_token"] = DEVICE_TOKEN;
@@ -166,52 +190,71 @@ bool getActiveSession(String& userName, String& sessionId) {
   String body;
   serializeJson(request, body);
 
+  Serial.print("POST body: ");
+  Serial.println(body);
+
   int httpCode = http.POST(body);
-
-  if (httpCode < 200 || httpCode >= 300) {
-    String errorBody = http.getString();
-    http.end();
-
-    Serial.print("Supabase HTTP ");
-    Serial.print(httpCode);
-    Serial.print(": ");
-    Serial.println(errorBody);
-    return false;
-  }
-
   String response = http.getString();
   http.end();
 
-  JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, response);
+  Serial.print("HTTP: ");
+  Serial.println(httpCode);
+  Serial.print("Resposta: ");
+  Serial.println(response);
 
-  if (error) {
-    Serial.print("JSON invalido: ");
-    Serial.println(error.c_str());
+  if (httpCode < 200 || httpCode >= 300) {
+    errorInfo = "HTTP " + String(httpCode);
+    showHttpError(httpCode, response);
     return false;
   }
 
+  JsonDocument doc;
+  DeserializationError jsonError = deserializeJson(doc, response);
+
+  if (jsonError) {
+    errorInfo = String("JSON invalido: ") + jsonError.c_str();
+    Serial.println(errorInfo);
+    oledMessage("TAMPAE", "ERRO JSON", "Resposta invalida", "Veja Serial");
+    return false;
+  }
+
+  // A máquina virtual aceita tanto array quanto objeto.
+  // Reproduzimos exatamente essa lógica:
+  // const s = Array.isArray(data) ? data[0] : data;
   JsonVariant row;
 
   if (doc.is<JsonArray>()) {
     JsonArray array = doc.as<JsonArray>();
+
     if (array.isNull() || array.size() == 0) {
-      userName = "";
-      sessionId = "";
+      Serial.println("RPC OK: nenhuma sessao ativa.");
       return true;
     }
+
     row = array[0];
   } else if (doc.is<JsonObject>()) {
     row = doc.as<JsonObject>();
   } else {
+    errorInfo = "Formato JSON inesperado";
+    Serial.println(errorInfo);
     return false;
   }
 
+  // EXATAMENTE os campos usados pela máquina virtual:
+  // s.session_id, s.user_id, s.nome, s.evento_id
   sessionId = row["session_id"] | "";
   userName = row["nome"] | "";
 
-  // Alguns dados podem não retornar nome. Nesse caso, usamos o user_id
-  // apenas como fallback visual.
+  Serial.print("session_id: ");
+  Serial.println(sessionId);
+  Serial.print("nome: ");
+  Serial.println(userName);
+  Serial.print("user_id: ");
+  Serial.println((const char*)(row["user_id"] | ""));
+  Serial.print("evento_id: ");
+  Serial.println((const char*)(row["evento_id"] | ""));
+
+  // Mesmo fallback usado no firmware anterior, caso nome venha vazio.
   if (userName.length() == 0) {
     userName = row["user_id"] | "Usuario";
   }
@@ -223,11 +266,6 @@ bool getActiveSession(String& userName, String& sessionId) {
 // SESSÃO
 // ============================================================
 void checkSession() {
-  if (!configurationIsValid()) {
-    oledMessage("TAMPAE", "Configure o codigo", "Wi-Fi/Supabase", "antes do teste");
-    return;
-  }
-
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastWifiRetry >= WIFI_RETRY_INTERVAL) {
       lastWifiRetry = millis();
@@ -238,14 +276,19 @@ void checkSession() {
 
   String userName;
   String sessionId;
+  String errorInfo;
 
-  if (!getActiveSession(userName, sessionId)) {
-    oledMessage("TAMPAE", "Wi-Fi OK", "Erro ao consultar", "Supabase");
+  if (!getActiveSession(userName, sessionId, errorInfo)) {
+    if (errorInfo == "Wi-Fi desconectado") {
+      return;
+    }
+    // getActiveSession já mostra o diagnóstico HTTP/JSON no OLED.
     return;
   }
 
   if (sessionId.length() == 0) {
     if (lastSessionId.length() > 0) {
+      Serial.println("Sessao encerrada ou ainda nao existe nova sessao.");
       lastSessionId = "";
       lastUserName = "";
     }
@@ -254,7 +297,6 @@ void checkSession() {
     return;
   }
 
-  // Só atualiza a tela quando a sessão realmente muda.
   if (sessionId != lastSessionId || userName != lastUserName) {
     lastSessionId = sessionId;
     lastUserName = userName;
@@ -273,7 +315,7 @@ void checkSession() {
 // ============================================================
 void setup() {
   Serial.begin(115200);
-  delay(200);
+  delay(300);
 
   Wire.begin(I2C_SDA, I2C_SCL);
 
@@ -288,20 +330,23 @@ void setup() {
   delay(1000);
 
   Serial.println();
-  Serial.println("=================================");
-  Serial.println("TAMPAE - TESTE ESP32 + OLED");
+  Serial.println("========================================");
+  Serial.println("TAMPAE - ESP32 + OLED + SUPABASE");
+  Serial.println("Base: maquina virtual de teste");
   Serial.println("SDA: GPIO 21");
   Serial.println("SCL: GPIO 22");
-  Serial.println("=================================");
+  Serial.println("========================================");
 
-  if (!configurationIsValid()) {
-    Serial.println("Configure WIFI, SUPABASE, MACHINE_ID e DEVICE_TOKEN.");
-    oledMessage("TAMPAE", "CONFIGURACAO", "PENDENTE", "Veja o codigo");
-    return;
-  }
+  Serial.print("MACHINE_ID: ");
+  Serial.println(MACHINE_ID);
+  Serial.print("DEVICE_TOKEN: ");
+  Serial.println(DEVICE_TOKEN);
 
   connectWiFi();
-  checkSession();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    checkSession();
+  }
 }
 
 // ============================================================
