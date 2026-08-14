@@ -1,4 +1,5 @@
 #include <WiFi.h>
+#include <WebServer.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <Wire.h>
@@ -14,6 +15,7 @@
 #define I2C_SCL 22
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+WebServer server(80);
 
 const char* WIFI_SSID = "DAYANE";
 const char* WIFI_PASSWORD = "@Felipe23";
@@ -21,11 +23,10 @@ const char* SUPABASE_URL = "https://usztjfxtbagjbnupiuxm.supabase.co";
 const char* SUPABASE_ANON_KEY = "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr";
 const char* EVENT_ID = "a142ed17-e276-47e0-918f-8d1145b558c0";
 const char* MACHINE_NAME = "TampAê - ESP32";
-const float MACHINE_LATITUDE = 0.0;
-const float MACHINE_LONGITUDE = 0.0;
 
 String machineId = "";
 String deviceToken = "";
+String qrPayload = "";
 String lastSessionId = "";
 unsigned long lastPoll = 0;
 const unsigned long POLL_INTERVAL = 1500;
@@ -41,70 +42,105 @@ void oledMessage(const String& a, const String& b = "", const String& c = "") {
   display.display();
 }
 
-// Desenha o QR usando a maior escala inteira que couber nos 128x64.
-// Para o payload atual, normalmente teremos 37x37 modulos (QR v5),
-// permitindo escala 1 e aproveitamento de praticamente toda a altura.
-void drawQR(esp_qrcode_handle_t qrHandle) {
-  int modules = esp_qrcode_get_size(qrHandle);
-  const int quietZone = 2;
-
-  // Escolhe automaticamente a maior escala que cabe na tela.
-  int scaleX = SCREEN_WIDTH / (modules + quietZone * 2);
-  int scaleY = SCREEN_HEIGHT / (modules + quietZone * 2);
-  int scale = min(scaleX, scaleY);
-  if (scale < 1) scale = 1;
-
-  int total = modules * scale + quietZone * 2 * scale;
-  int x0 = (SCREEN_WIDTH - total) / 2;
-  int y0 = (SCREEN_HEIGHT - total) / 2;
-
-  display.clearDisplay();
-  display.fillRect(x0, y0, total, total, SSD1306_WHITE);
-
-  for (int y = 0; y < modules; y++) {
-    for (int x = 0; x < modules; x++) {
-      if (esp_qrcode_get_module(qrHandle, x, y)) {
-        display.fillRect(
-          x0 + (quietZone + x) * scale,
-          y0 + (quietZone + y) * scale,
-          scale,
-          scale,
-          SSD1306_BLACK
-        );
-      }
-    }
-  }
-
-  display.display();
-
-  Serial.print("QR: ");
-  Serial.print(modules);
-  Serial.print("x");
-  Serial.print(modules);
-  Serial.print(" | escala: ");
-  Serial.println(scale);
+String htmlEscape(const String& s) {
+  String out = s;
+  out.replace("&", "&amp;");
+  out.replace("<", "&lt;");
+  out.replace(">", "&gt;");
+  out.replace("\"", "&quot;");
+  return out;
 }
 
-void showQR(const String& payload) {
+String makeQrSvg(const String& payload) {
+  // Gera o QR no ESP32 e entrega como SVG. O navegador amplia sem perder qualidade.
+  // O mesmo payload continua sendo usado pelo aplicativo.
   esp_qrcode_config_t config = {};
-  config.display_func = drawQR;
   config.max_qrcode_version = 10;
   config.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
 
-  esp_err_t result = esp_qrcode_generate(&config, payload.c_str());
+  // A API do componente QRCode do ESP32 usa display_func para expor os módulos.
+  // Para a página web, calculamos novamente via callback e guardamos os módulos.
+  struct Capture {
+    int size = 0;
+    bool modules[177][177] = {};
+  };
+  static Capture capture;
+  capture.size = 0;
 
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("QR EXIBIDO NO OLED");
-  Serial.print("Payload: ");
-  Serial.println(payload);
-  if (result != ESP_OK) {
-    Serial.print("ERRO AO GERAR QR: ");
-    Serial.println((int)result);
-  } else {
-    Serial.println("Escaneie este QR pelo aplicativo.");
+  config.display_func = [](esp_qrcode_handle_t qr) {
+    capture.size = esp_qrcode_get_size(qr);
+    for (int y = 0; y < capture.size; y++) {
+      for (int x = 0; x < capture.size; x++) {
+        capture.modules[y][x] = esp_qrcode_get_module(qr, x, y);
+      }
+    }
+  };
+
+  esp_err_t result = esp_qrcode_generate(&config, payload.c_str());
+  if (result != ESP_OK || capture.size <= 0) {
+    return "<p>Erro ao gerar QR Code.</p>";
   }
-  Serial.println("========================================");
+
+  const int qz = 4;
+  String svg;
+  int full = capture.size + qz * 2;
+  svg.reserve(full * full / 2);
+  svg += "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ";
+  svg += String(full);
+  svg += " ";
+  svg += String(full);
+  svg += "' shape-rendering='crispEdges' class='qr'>";
+  svg += "<rect width='100%' height='100%' fill='white'/>";
+
+  for (int y = 0; y < capture.size; y++) {
+    for (int x = 0; x < capture.size; x++) {
+      if (capture.modules[y][x]) {
+        svg += "<rect x='";
+        svg += String(x + qz);
+        svg += "' y='";
+        svg += String(y + qz);
+        svg += "' width='1' height='1' fill='black'/>";
+      }
+    }
+  }
+  svg += "</svg>";
+  return svg;
+}
+
+void handleRoot() {
+  String svg = makeQrSvg(qrPayload);
+
+  String page;
+  page.reserve(svg.length() + 2500);
+  page += "<!doctype html><html lang='pt-BR'><head>";
+  page += "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>";
+  page += "<meta charset='utf-8'><title>TampAê - QR</title>";
+  page += "<style>";
+  page += "*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#111;display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif;color:#fff;padding:12px}";
+  page += ".card{width:min(96vw,700px);text-align:center}.qr{display:block;width:min(92vw,620px);height:min(92vw,620px);max-height:78vh;margin:auto;background:#fff;border:10px solid #fff;border-radius:4px}.title{font-size:22px;font-weight:700;margin:10px 0 4px}.info{font-size:12px;opacity:.75;word-break:break-all}.hint{font-size:13px;margin-top:8px}";
+  page += "</style></head><body><main class='card'>";
+  page += svg;
+  page += "<div class='title'>TAMPAÊ</div>";
+  page += "<div class='hint'>Escaneie este QR pelo aplicativo</div>";
+  page += "<div class='info'>";
+  page += htmlEscape(machineId);
+  page += "</div></main></body></html>";
+
+  server.send(200, "text/html; charset=utf-8", page);
+}
+
+void handleInfo() {
+  String json = "{\"machine_id\":\"" + machineId + "\",\"event_id\":\"" + String(EVENT_ID) + "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+  server.send(200, "application/json", json);
+}
+
+void startWebServer() {
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/info", HTTP_GET, handleInfo);
+  server.begin();
+  Serial.println("Servidor web iniciado na porta 80.");
+  Serial.print("Abra no celular: http://");
+  Serial.println(WiFi.localIP());
 }
 
 bool connectWiFi() {
@@ -160,8 +196,8 @@ bool createMachine() {
 
   JsonDocument req;
   req["nome"] = MACHINE_NAME;
-  req["latitude"] = MACHINE_LATITUDE;
-  req["longitude"] = MACHINE_LONGITUDE;
+  req["latitude"] = 0.0;
+  req["longitude"] = 0.0;
   req["status"] = "ativa";
 
   String body;
@@ -198,6 +234,9 @@ bool createMachine() {
 
   if (!machineId.length() || !deviceToken.length()) return false;
 
+  qrPayload = String("{\"machine_id\":\"") + machineId +
+              "\",\"event_id\":\"" + EVENT_ID + "\"}";
+
   Serial.println();
   Serial.println("========================================");
   Serial.println("MAQUINA CRIADA");
@@ -208,6 +247,8 @@ bool createMachine() {
   Serial.print("EVENT_ID: ");
   Serial.println(EVENT_ID);
   Serial.println("========================================");
+  Serial.print("QR PAYLOAD: ");
+  Serial.println(qrPayload);
 
   return true;
 }
@@ -217,7 +258,6 @@ void checkSession() {
 
   HTTPClient http;
   if (!http.begin(rpcUrl("get_active_session"))) return;
-
   headers(http);
 
   JsonDocument req;
@@ -287,19 +327,18 @@ void setup() {
   if (!connectWiFi()) return;
 
   oledMessage("TAMPAE", "Criando maquina...");
-
   if (!createMachine()) {
     oledMessage("TAMPAE", "Erro ao criar", "maquina");
     return;
   }
 
-  String qrPayload = String("{\"machine_id\":\"") + machineId +
-                     "\",\"event_id\":\"" + EVENT_ID + "\"}";
-
-  showQR(qrPayload);
+  startWebServer();
+  oledMessage("TAMPAE", "QR pronto", WiFi.localIP().toString());
 }
 
 void loop() {
+  server.handleClient();
+
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
     delay(1000);
@@ -311,5 +350,5 @@ void loop() {
     checkSession();
   }
 
-  delay(10);
+  delay(2);
 }
