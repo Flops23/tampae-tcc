@@ -6,16 +6,18 @@
 #include <Adafruit_SSD1306.h>
 
 // ============================================================
-// TAMPAÊ - PRIMEIRO TESTE DA MÁQUINA
+// TAMPAÊ - TESTE DA MÁQUINA REAL
 // ESP32 + OLED SSD1306 128x64 I2C
 // SDA -> GPIO 21
 // SCL -> GPIO 22
 //
-// Baseado diretamente no fluxo da máquina virtual de teste:
-//   sb.rpc("get_active_session", {
-//     p_machine_id: machine.id,
-//     p_device_token: machine.device_token
-//   })
+// Fluxo reproduzido diretamente da máquina virtual:
+// 1. Conecta no Wi-Fi.
+// 2. Procura exatamente 1 evento com status "em_andamento".
+// 3. Cria uma máquina em public.machines.
+// 4. Recebe o id e o device_token gerados pelo banco.
+// 5. Usa ESSES valores para chamar get_active_session.
+// 6. Quando o app criar uma machine_session, mostra o usuário no OLED.
 //
 // Neste estágio NÃO há sensores, balança, LDR ou botão.
 // ============================================================
@@ -38,9 +40,17 @@ const char* WIFI_PASSWORD = "@Felipe23";
 const char* SUPABASE_URL = "https://usztjfxtbagjbnupiuxm.supabase.co";
 const char* SUPABASE_ANON_KEY = "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr";
 
-// Mesmos valores informados para a máquina cadastrada.
-const char* MACHINE_ID = "8076b255-53de-49f0-bb53-69024edcbd23";
-const char* DEVICE_TOKEN = "a4e0a37b-9c1f-4f6b-9e1b-fddc4f4fccfa";
+// A partir de agora NÃO usamos mais MACHINE_ID/DEVICE_TOKEN fixos.
+// O ESP32 vai criar a máquina e receber esses valores do banco,
+// exatamente como a máquina virtual faz.
+String machineId = "";
+String deviceToken = "";
+String eventId = "";
+String eventName = "";
+
+const char* MACHINE_NAME = "TampAê - ESP32";
+const float MACHINE_LATITUDE = 0.0;
+const float MACHINE_LONGITUDE = 0.0;
 
 const unsigned long SESSION_POLL_INTERVAL = 1500;
 const unsigned long WIFI_RETRY_INTERVAL = 5000;
@@ -75,7 +85,6 @@ void oledMessage(const String& line1,
 
 void showConnectedUser(const String& name) {
   oledClear();
-
   display.setTextSize(1);
   display.println("TAMPAE");
   display.println();
@@ -84,9 +93,7 @@ void showConnectedUser(const String& name) {
 
   display.setTextSize(2);
   String shortName = name;
-  if (shortName.length() > 10) {
-    shortName = shortName.substring(0, 10);
-  }
+  if (shortName.length() > 10) shortName = shortName.substring(0, 10);
   display.println(shortName);
 
   display.setTextSize(1);
@@ -102,7 +109,6 @@ bool connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
   oledMessage("TAMPAE", "Conectando Wi-Fi...");
-
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -128,68 +134,262 @@ bool connectWiFi() {
 }
 
 // ============================================================
-// SUPABASE
+// SUPABASE - URLs
 // ============================================================
-String getRpcUrl() {
+String getRestUrl(const String& table) {
   String base = SUPABASE_URL;
   while (base.endsWith("/")) base.remove(base.length() - 1);
-  return base + "/rest/v1/rpc/get_active_session";
+  return base + "/rest/v1/" + table;
 }
 
-// Mostra um erro HTTP no OLED e no Serial. Isso é importante para
-// diferenciar falha de autenticação, RPC inexistente, RLS etc.
-void showHttpError(int httpCode, const String& response) {
-  Serial.print("get_active_session HTTP ");
+String getRpcUrl(const String& rpcName) {
+  String base = SUPABASE_URL;
+  while (base.endsWith("/")) base.remove(base.length() - 1);
+  return base + "/rest/v1/rpc/" + rpcName;
+}
+
+void addSupabaseHeaders(HTTPClient& http) {
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("apikey", SUPABASE_ANON_KEY);
+  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+}
+
+void showHttpError(const String& operation, int httpCode, const String& response) {
+  Serial.print(operation);
+  Serial.print(" HTTP ");
   Serial.print(httpCode);
   Serial.print(": ");
   Serial.println(response);
 
-  String code = String(httpCode);
-  oledMessage("TAMPAE", "ERRO RPC", "HTTP " + code, "Veja Serial");
+  oledMessage("TAMPAE", "ERRO " + operation, "HTTP " + String(httpCode), "Veja Serial");
 }
 
-bool getActiveSession(String& userName, String& sessionId, String& errorInfo) {
-  userName = "";
-  sessionId = "";
-  errorInfo = "";
-
-  if (WiFi.status() != WL_CONNECTED) {
-    errorInfo = "Wi-Fi desconectado";
-    return false;
-  }
-
+// ============================================================
+// 1. EVENTO - igual ao loadSingleEvent() do HTML
+// ============================================================
+bool loadSingleEvent() {
   HTTPClient http;
-  String url = getRpcUrl();
+  String url = getRestUrl("events") + "?select=id,nome,descricao,data_inicio,data_fim,status&status=eq.em_andamento";
 
   Serial.println();
-  Serial.println("--- get_active_session ---");
-  Serial.print("URL: ");
+  Serial.println("--- loadSingleEvent ---");
   Serial.println(url);
-  Serial.print("machine_id: ");
-  Serial.println(MACHINE_ID);
-  Serial.print("device_token: ");
-  Serial.println(DEVICE_TOKEN);
 
   if (!http.begin(url)) {
-    errorInfo = "http.begin falhou";
-    Serial.println(errorInfo);
+    Serial.println("http.begin falhou para events");
+    oledMessage("TAMPAE", "Erro events", "http.begin falhou");
     return false;
   }
 
   http.setTimeout(10000);
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("apikey", SUPABASE_ANON_KEY);
-  http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+  addSupabaseHeaders(http);
+
+  int httpCode = http.GET();
+  String response = http.getString();
+  http.end();
+
+  Serial.print("events HTTP: ");
+  Serial.println(httpCode);
+  Serial.print("events resposta: ");
+  Serial.println(response);
+
+  if (httpCode < 200 || httpCode >= 300) {
+    showHttpError("EVENTS", httpCode, response);
+    return false;
+  }
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, response);
+  if (err) {
+    Serial.print("JSON events invalido: ");
+    Serial.println(err.c_str());
+    oledMessage("TAMPAE", "Erro JSON", "events");
+    return false;
+  }
+
+  if (!doc.is<JsonArray>()) {
+    Serial.println("Resposta de events nao e array.");
+    oledMessage("TAMPAE", "Erro events", "Formato inesperado");
+    return false;
+  }
+
+  JsonArray events = doc.as<JsonArray>();
+
+  if (events.size() == 0) {
+    eventId = "";
+    eventName = "";
+    Serial.println("Nenhum evento em_andamento.");
+    oledMessage("TAMPAE", "Nenhum evento", "em andamento");
+    return false;
+  }
+
+  if (events.size() > 1) {
+    eventId = "";
+    eventName = "";
+    Serial.print("Existem ");
+    Serial.print(events.size());
+    Serial.println(" eventos em_andamento. Maquina bloqueada.");
+    oledMessage("TAMPAE", "ERRO: eventos", "mais de 1 ativo");
+    return false;
+  }
+
+  JsonObject event = events[0];
+  eventId = event["id"] | "";
+  eventName = event["nome"] | "";
+
+  Serial.print("Evento atual: ");
+  Serial.print(eventName);
+  Serial.print(" | ");
+  Serial.println(eventId);
+
+  return eventId.length() > 0;
+}
+
+// ============================================================
+// 2. CRIAR MÁQUINA - igual ao createMachine() do HTML
+// ============================================================
+bool createMachine() {
+  HTTPClient http;
+  String url = getRestUrl("machines");
+
+  Serial.println();
+  Serial.println("--- createMachine ---");
+  Serial.println(url);
+
+  if (!http.begin(url)) {
+    Serial.println("http.begin falhou para machines");
+    oledMessage("TAMPAE", "Erro machines", "http.begin falhou");
+    return false;
+  }
+
+  http.setTimeout(10000);
+  addSupabaseHeaders(http);
+  // Equivalente ao .insert(payload).select(...).single() do HTML.
   http.addHeader("Prefer", "return=representation");
 
-  // EXATAMENTE os mesmos nomes de parâmetros usados pela máquina virtual.
+  JsonDocument payload;
+  payload["nome"] = MACHINE_NAME;
+  payload["latitude"] = MACHINE_LATITUDE;
+  payload["longitude"] = MACHINE_LONGITUDE;
+  payload["status"] = "ativa";
+
+  String body;
+  serializeJson(payload, body);
+
+  Serial.print("machines INSERT body: ");
+  Serial.println(body);
+
+  int httpCode = http.POST(body);
+  String response = http.getString();
+  http.end();
+
+  Serial.print("machines HTTP: ");
+  Serial.println(httpCode);
+  Serial.print("machines resposta: ");
+  Serial.println(response);
+
+  if (httpCode < 200 || httpCode >= 300) {
+    showHttpError("MACHINES", httpCode, response);
+    return false;
+  }
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, response);
+  if (err) {
+    Serial.print("JSON machines invalido: ");
+    Serial.println(err.c_str());
+    oledMessage("TAMPAE", "Erro JSON", "machines");
+    return false;
+  }
+
+  // PostgREST retorna uma lista quando usamos Prefer: return=representation.
+  JsonObject machine;
+  if (doc.is<JsonArray>()) {
+    JsonArray rows = doc.as<JsonArray>();
+    if (rows.size() == 0) {
+      Serial.println("INSERT nao retornou a maquina.");
+      oledMessage("TAMPAE", "Erro", "maquina nao retornada");
+      return false;
+    }
+    machine = rows[0].as<JsonObject>();
+  } else if (doc.is<JsonObject>()) {
+    machine = doc.as<JsonObject>();
+  } else {
+    Serial.println("Formato inesperado no retorno de machines.");
+    return false;
+  }
+
+  // IMPORTANTE: agora usamos o id e device_token REALMENTE GERADOS
+  // pelo banco, em vez dos valores fixos usados no teste anterior.
+  machineId = machine["id"] | "";
+  deviceToken = machine["device_token"] | "";
+
+  Serial.println("========================================");
+  Serial.println("MAQUINA CRIADA PELO ESP32");
+  Serial.print("id: ");
+  Serial.println(machineId);
+  Serial.print("nome: ");
+  Serial.println((const char*)(machine["nome"] | ""));
+  Serial.print("device_token: ");
+  Serial.println(deviceToken);
+  Serial.print("evento_id: ");
+  Serial.println(eventId);
+  Serial.print("QR payload: ");
+  Serial.print("{\"machine_id\":\"");
+  Serial.print(machineId);
+  Serial.print("\",\"event_id\":\"");
+  Serial.print(eventId);
+  Serial.println("\"}");
+  Serial.println("========================================");
+
+  if (machineId.length() == 0 || deviceToken.length() == 0) {
+    Serial.println("ERRO: id ou device_token nao retornado.");
+    oledMessage("TAMPAE", "Erro maquina", "sem token/id");
+    return false;
+  }
+
+  oledMessage("MAQUINA CRIADA", "ID:", machineId.substring(0, 18), "Token OK");
+  delay(1500);
+  return true;
+}
+
+// ============================================================
+// 3. SESSÃO - igual ao checkSession() do HTML
+// ============================================================
+bool getActiveSession(String& userName, String& sessionId) {
+  userName = "";
+  sessionId = "";
+
+  if (WiFi.status() != WL_CONNECTED || machineId.length() == 0 || deviceToken.length() == 0) {
+    return false;
+  }
+
+  HTTPClient http;
+  String url = getRpcUrl("get_active_session");
+
+  if (!http.begin(url)) {
+    Serial.println("http.begin falhou para get_active_session");
+    oledMessage("TAMPAE", "Erro RPC", "http.begin falhou");
+    return false;
+  }
+
+  http.setTimeout(10000);
+  addSupabaseHeaders(http);
+
+  // EXATAMENTE os mesmos parâmetros da máquina virtual.
   JsonDocument request;
-  request["p_machine_id"] = MACHINE_ID;
-  request["p_device_token"] = DEVICE_TOKEN;
+  request["p_machine_id"] = machineId;
+  request["p_device_token"] = deviceToken;
 
   String body;
   serializeJson(request, body);
 
+  Serial.println();
+  Serial.println("--- get_active_session ---");
+  Serial.print("machine_id REAL: ");
+  Serial.println(machineId);
+  Serial.print("device_token REAL: ");
+  Serial.println(deviceToken);
   Serial.print("POST body: ");
   Serial.println(body);
 
@@ -197,74 +397,58 @@ bool getActiveSession(String& userName, String& sessionId, String& errorInfo) {
   String response = http.getString();
   http.end();
 
-  Serial.print("HTTP: ");
+  Serial.print("RPC HTTP: ");
   Serial.println(httpCode);
-  Serial.print("Resposta: ");
+  Serial.print("RPC resposta: ");
   Serial.println(response);
 
   if (httpCode < 200 || httpCode >= 300) {
-    errorInfo = "HTTP " + String(httpCode);
-    showHttpError(httpCode, response);
+    showHttpError("RPC", httpCode, response);
     return false;
   }
 
   JsonDocument doc;
-  DeserializationError jsonError = deserializeJson(doc, response);
-
-  if (jsonError) {
-    errorInfo = String("JSON invalido: ") + jsonError.c_str();
-    Serial.println(errorInfo);
-    oledMessage("TAMPAE", "ERRO JSON", "Resposta invalida", "Veja Serial");
+  DeserializationError err = deserializeJson(doc, response);
+  if (err) {
+    Serial.print("JSON RPC invalido: ");
+    Serial.println(err.c_str());
+    oledMessage("TAMPAE", "Erro JSON RPC", "Veja Serial");
     return false;
   }
 
-  // A máquina virtual aceita tanto array quanto objeto.
-  // Reproduzimos exatamente essa lógica:
-  // const s = Array.isArray(data) ? data[0] : data;
   JsonVariant row;
 
   if (doc.is<JsonArray>()) {
     JsonArray array = doc.as<JsonArray>();
-
-    if (array.isNull() || array.size() == 0) {
+    if (array.size() == 0) {
       Serial.println("RPC OK: nenhuma sessao ativa.");
       return true;
     }
-
     row = array[0];
   } else if (doc.is<JsonObject>()) {
     row = doc.as<JsonObject>();
   } else {
-    errorInfo = "Formato JSON inesperado";
-    Serial.println(errorInfo);
+    Serial.println("Formato JSON inesperado na RPC.");
     return false;
   }
 
-  // EXATAMENTE os campos usados pela máquina virtual:
-  // s.session_id, s.user_id, s.nome, s.evento_id
   sessionId = row["session_id"] | "";
   userName = row["nome"] | "";
+
+  if (userName.length() == 0) {
+    userName = row["user_id"] | "Usuario";
+  }
 
   Serial.print("session_id: ");
   Serial.println(sessionId);
   Serial.print("nome: ");
   Serial.println(userName);
-  Serial.print("user_id: ");
-  Serial.println((const char*)(row["user_id"] | ""));
   Serial.print("evento_id: ");
   Serial.println((const char*)(row["evento_id"] | ""));
-
-  // Mesmo fallback usado no firmware anterior, caso nome venha vazio.
-  if (userName.length() == 0) {
-    userName = row["user_id"] | "Usuario";
-  }
 
   return true;
 }
 
-// ============================================================
-// SESSÃO
-// ============================================================
 void checkSession() {
   if (WiFi.status() != WL_CONNECTED) {
     if (millis() - lastWifiRetry >= WIFI_RETRY_INTERVAL) {
@@ -274,21 +458,15 @@ void checkSession() {
     return;
   }
 
+  if (machineId.length() == 0 || deviceToken.length() == 0) return;
+
   String userName;
   String sessionId;
-  String errorInfo;
 
-  if (!getActiveSession(userName, sessionId, errorInfo)) {
-    if (errorInfo == "Wi-Fi desconectado") {
-      return;
-    }
-    // getActiveSession já mostra o diagnóstico HTTP/JSON no OLED.
-    return;
-  }
+  if (!getActiveSession(userName, sessionId)) return;
 
   if (sessionId.length() == 0) {
     if (lastSessionId.length() > 0) {
-      Serial.println("Sessao encerrada ou ainda nao existe nova sessao.");
       lastSessionId = "";
       lastUserName = "";
     }
@@ -300,13 +478,12 @@ void checkSession() {
   if (sessionId != lastSessionId || userName != lastUserName) {
     lastSessionId = sessionId;
     lastUserName = userName;
+    showConnectedUser(userName);
 
     Serial.print("USUARIO CONECTADO: ");
     Serial.print(userName);
     Serial.print(" | sessao: ");
     Serial.println(sessionId);
-
-    showConnectedUser(userName);
   }
 }
 
@@ -321,32 +498,28 @@ void setup() {
 
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
     Serial.println("ERRO: OLED SSD1306 nao encontrado.");
-    while (true) {
-      delay(1000);
-    }
+    while (true) delay(1000);
   }
 
   oledMessage("TAMPAE", "Iniciando maquina...");
-  delay(1000);
+  delay(800);
 
   Serial.println();
   Serial.println("========================================");
   Serial.println("TAMPAE - ESP32 + OLED + SUPABASE");
-  Serial.println("Base: maquina virtual de teste");
-  Serial.println("SDA: GPIO 21");
-  Serial.println("SCL: GPIO 22");
+  Serial.println("CRIACAO DE MAQUINA IGUAL AO HTML");
   Serial.println("========================================");
 
-  Serial.print("MACHINE_ID: ");
-  Serial.println(MACHINE_ID);
-  Serial.print("DEVICE_TOKEN: ");
-  Serial.println(DEVICE_TOKEN);
+  if (!connectWiFi()) return;
 
-  connectWiFi();
+  // Igual ao fluxo da máquina virtual: primeiro carrega o evento.
+  if (!loadSingleEvent()) return;
 
-  if (WiFi.status() == WL_CONNECTED) {
-    checkSession();
-  }
+  // Depois cria a máquina usando o payload do HTML.
+  if (!createMachine()) return;
+
+  // Só depois de criar a máquina começamos a procurar sessão.
+  checkSession();
 }
 
 // ============================================================
