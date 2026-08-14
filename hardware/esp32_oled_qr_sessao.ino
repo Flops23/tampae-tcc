@@ -6,11 +6,6 @@
 #include <Adafruit_SSD1306.h>
 #include <qrcode.h>
 
-// Usa o QR Code integrado ao SDK/Arduino-ESP32 (Espressif).
-// Nao usa a API QRCode/ricmoo, pois o ESP32 ja fornece qrcode.h.
-// API utilizada: esp_qrcode_generate(), esp_qrcode_get_size(),
-// esp_qrcode_get_module().
-
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -20,18 +15,11 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// ============================================================
-// CONFIGURACAO
-// ============================================================
 const char* WIFI_SSID = "DAYANE";
 const char* WIFI_PASSWORD = "@Felipe23";
-
 const char* SUPABASE_URL = "https://usztjfxtbagjbnupiuxm.supabase.co";
 const char* SUPABASE_ANON_KEY = "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr";
-
-// Mesmo evento usado pela maquina virtual.
 const char* EVENT_ID = "a142ed17-e276-47e0-918f-8d1145b558c0";
-
 const char* MACHINE_NAME = "TampAê - ESP32";
 const float MACHINE_LATITUDE = 0.0;
 const float MACHINE_LONGITUDE = 0.0;
@@ -39,13 +27,9 @@ const float MACHINE_LONGITUDE = 0.0;
 String machineId = "";
 String deviceToken = "";
 String lastSessionId = "";
-
 unsigned long lastPoll = 0;
 const unsigned long POLL_INTERVAL = 1500;
 
-// ============================================================
-// OLED
-// ============================================================
 void oledMessage(const String& a, const String& b = "", const String& c = "") {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -57,32 +41,48 @@ void oledMessage(const String& a, const String& b = "", const String& c = "") {
   display.display();
 }
 
-// Callback chamado pelo encoder QR integrado ao ESP32.
+// Desenha o QR usando a maior escala inteira que couber nos 128x64.
+// Para o payload atual, normalmente teremos 37x37 modulos (QR v5),
+// permitindo escala 1 e aproveitamento de praticamente toda a altura.
 void drawQR(esp_qrcode_handle_t qrHandle) {
   int modules = esp_qrcode_get_size(qrHandle);
-  const int border = 2;
+  const int quietZone = 2;
 
-  // O OLED tem 64 px de altura. Usamos escala 1 para preservar
-  // todos os modulos mesmo em QR maiores.
-  const int scale = 1;
-  const int total = modules * scale + border * 2;
-  const int x0 = (SCREEN_WIDTH - total) / 2;
-  const int y0 = (SCREEN_HEIGHT - total) / 2;
+  // Escolhe automaticamente a maior escala que cabe na tela.
+  int scaleX = SCREEN_WIDTH / (modules + quietZone * 2);
+  int scaleY = SCREEN_HEIGHT / (modules + quietZone * 2);
+  int scale = min(scaleX, scaleY);
+  if (scale < 1) scale = 1;
+
+  int total = modules * scale + quietZone * 2 * scale;
+  int x0 = (SCREEN_WIDTH - total) / 2;
+  int y0 = (SCREEN_HEIGHT - total) / 2;
 
   display.clearDisplay();
-
-  // Fundo branco + modulos pretos.
   display.fillRect(x0, y0, total, total, SSD1306_WHITE);
 
   for (int y = 0; y < modules; y++) {
     for (int x = 0; x < modules; x++) {
       if (esp_qrcode_get_module(qrHandle, x, y)) {
-        display.drawPixel(x0 + border + x, y0 + border + y, SSD1306_BLACK);
+        display.fillRect(
+          x0 + (quietZone + x) * scale,
+          y0 + (quietZone + y) * scale,
+          scale,
+          scale,
+          SSD1306_BLACK
+        );
       }
     }
   }
 
   display.display();
+
+  Serial.print("QR: ");
+  Serial.print(modules);
+  Serial.print("x");
+  Serial.print(modules);
+  Serial.print(" | escala: ");
+  Serial.println(scale);
 }
 
 void showQR(const String& payload) {
@@ -98,7 +98,6 @@ void showQR(const String& payload) {
   Serial.println("QR EXIBIDO NO OLED");
   Serial.print("Payload: ");
   Serial.println(payload);
-
   if (result != ESP_OK) {
     Serial.print("ERRO AO GERAR QR: ");
     Serial.println((int)result);
@@ -108,9 +107,6 @@ void showQR(const String& payload) {
   Serial.println("========================================");
 }
 
-// ============================================================
-// WIFI
-// ============================================================
 bool connectWiFi() {
   if (WiFi.status() == WL_CONNECTED) return true;
 
@@ -155,9 +151,6 @@ void headers(HTTPClient& http) {
   http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
 }
 
-// ============================================================
-// CRIA MAQUINA
-// ============================================================
 bool createMachine() {
   HTTPClient http;
   if (!http.begin(restUrl("machines"))) return false;
@@ -219,9 +212,6 @@ bool createMachine() {
   return true;
 }
 
-// ============================================================
-// CONSULTA SESSAO
-// ============================================================
 void checkSession() {
   if (WiFi.status() != WL_CONNECTED || !machineId.length() || !deviceToken.length()) return;
 
@@ -264,7 +254,6 @@ void checkSession() {
 
   String sessionId = row["session_id"] | "";
   if (!sessionId.length() || sessionId == lastSessionId) return;
-
   lastSessionId = sessionId;
 
   String userName = row["nome"] | "";
@@ -282,9 +271,6 @@ void checkSession() {
   Serial.println("========================================");
 }
 
-// ============================================================
-// SETUP
-// ============================================================
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -307,17 +293,12 @@ void setup() {
     return;
   }
 
-  // Mesmo payload usado pela maquina virtual.
   String qrPayload = String("{\"machine_id\":\"") + machineId +
                      "\",\"event_id\":\"" + EVENT_ID + "\"}";
 
-  // OLED permanece com o QR enquanto o ESP32 monitora a sessao.
   showQR(qrPayload);
 }
 
-// ============================================================
-// LOOP
-// ============================================================
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
