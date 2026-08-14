@@ -4,26 +4,12 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <qrcode.h>
 
-// IMPORTANTE:
-// Este sketch usa a biblioteca QRCode de Richard Moore (ricmoo),
-// https://github.com/ricmoo/QRCode
-// O arquivo da biblioteca deve ser qrcode.h e expor:
-// QRCode, qrcode_getBufferSize, qrcode_initText e qrcode_getModule.
-// Se o Arduino encontrar outra biblioteca qrcode.h, ocorrerão erros
-// exatamente como: 'QRCode' does not name a type.
-#include "qrcode.h"
-
-// ============================================================
-// TAMPAE - TESTE DIRETO: OLED + QR + SESSAO
-// ESP32 + OLED SSD1306 128x64 I2C
-// SDA -> GPIO 21
-// SCL -> GPIO 22
-//
-// O ESP32 cria a maquina, gera o QR no proprio OLED e fica
-// aguardando o aplicativo escanear esse QR.
-// Quando a sessao aparecer, NOME e EVENTO_ID saem no Serial.
-// ============================================================
+// Usa o QR Code integrado ao SDK/Arduino-ESP32 (Espressif).
+// Nao usa a API QRCode/ricmoo, pois o ESP32 ja fornece qrcode.h.
+// API utilizada: esp_qrcode_generate(), esp_qrcode_get_size(),
+// esp_qrcode_get_module().
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -31,11 +17,8 @@
 #define OLED_ADDRESS 0x3C
 #define I2C_SDA 21
 #define I2C_SCL 22
-#define QR_VERSION 5
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-uint8_t qrData[qrcode_getBufferSize(QR_VERSION)];
-QRCode qr;
 
 // ============================================================
 // CONFIGURACAO
@@ -46,7 +29,7 @@ const char* WIFI_PASSWORD = "@Felipe23";
 const char* SUPABASE_URL = "https://usztjfxtbagjbnupiuxm.supabase.co";
 const char* SUPABASE_ANON_KEY = "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr";
 
-// Evento que deve entrar no QR, igual ao teste da maquina virtual.
+// Mesmo evento usado pela maquina virtual.
 const char* EVENT_ID = "a142ed17-e276-47e0-918f-8d1145b558c0";
 
 const char* MACHINE_NAME = "TampAê - ESP32";
@@ -74,35 +57,54 @@ void oledMessage(const String& a, const String& b = "", const String& c = "") {
   display.display();
 }
 
-// QR de 37x37 modulos. Com margem de 2 pixels, cabe no 128x64.
-void showQR(const String& payload) {
-  qrcode_initText(&qr, qrData, QR_VERSION, ECC_LOW, payload.c_str());
-
-  const int modules = qr.size;
+// Callback chamado pelo encoder QR integrado ao ESP32.
+void drawQR(esp_qrcode_handle_t qrHandle) {
+  int modules = esp_qrcode_get_size(qrHandle);
   const int border = 2;
-  const int total = modules + border * 2;
+
+  // O OLED tem 64 px de altura. Usamos escala 1 para preservar
+  // todos os modulos mesmo em QR maiores.
+  const int scale = 1;
+  const int total = modules * scale + border * 2;
   const int x0 = (SCREEN_WIDTH - total) / 2;
   const int y0 = (SCREEN_HEIGHT - total) / 2;
 
   display.clearDisplay();
+
+  // Fundo branco + modulos pretos.
   display.fillRect(x0, y0, total, total, SSD1306_WHITE);
 
   for (int y = 0; y < modules; y++) {
     for (int x = 0; x < modules; x++) {
-      if (qrcode_getModule(&qr, x, y)) {
+      if (esp_qrcode_get_module(qrHandle, x, y)) {
         display.drawPixel(x0 + border + x, y0 + border + y, SSD1306_BLACK);
       }
     }
   }
 
   display.display();
+}
+
+void showQR(const String& payload) {
+  esp_qrcode_config_t config = {};
+  config.display_func = drawQR;
+  config.max_qrcode_version = 10;
+  config.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
+
+  esp_err_t result = esp_qrcode_generate(&config, payload.c_str());
 
   Serial.println();
   Serial.println("========================================");
   Serial.println("QR EXIBIDO NO OLED");
   Serial.print("Payload: ");
   Serial.println(payload);
-  Serial.println("Escaneie este QR pelo aplicativo.");
+
+  if (result != ESP_OK) {
+    Serial.print("ERRO AO GERAR QR: ");
+    Serial.println((int)result);
+  } else {
+    Serial.println("Escaneie este QR pelo aplicativo.");
+  }
   Serial.println("========================================");
 }
 
@@ -305,11 +307,11 @@ void setup() {
     return;
   }
 
-  // Exatamente o payload usado pelo QR da maquina virtual.
+  // Mesmo payload usado pela maquina virtual.
   String qrPayload = String("{\"machine_id\":\"") + machineId +
                      "\",\"event_id\":\"" + EVENT_ID + "\"}";
 
-  // A tela fica mostrando o QR enquanto o ESP32 monitora a sessao.
+  // OLED permanece com o QR enquanto o ESP32 monitora a sessao.
   showQR(qrPayload);
 }
 
