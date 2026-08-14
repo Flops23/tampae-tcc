@@ -4,7 +4,15 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <qrcode.h>
+
+// IMPORTANTE:
+// Este sketch usa a biblioteca QRCode de Richard Moore (ricmoo),
+// https://github.com/ricmoo/QRCode
+// O arquivo da biblioteca deve ser qrcode.h e expor:
+// QRCode, qrcode_getBufferSize, qrcode_initText e qrcode_getModule.
+// Se o Arduino encontrar outra biblioteca qrcode.h, ocorrerão erros
+// exatamente como: 'QRCode' does not name a type.
+#include "qrcode.h"
 
 // ============================================================
 // TAMPAE - TESTE DIRETO: OLED + QR + SESSAO
@@ -70,7 +78,7 @@ void oledMessage(const String& a, const String& b = "", const String& c = "") {
 void showQR(const String& payload) {
   qrcode_initText(&qr, qrData, QR_VERSION, ECC_LOW, payload.c_str());
 
-  const int modules = qrcode_getSize(&qr);
+  const int modules = qr.size;
   const int border = 2;
   const int total = modules + border * 2;
   const int x0 = (SCREEN_WIDTH - total) / 2;
