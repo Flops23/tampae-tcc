@@ -27,10 +27,6 @@
 //    1. envia UMA registrar_coleta;
 //    2. chama encerrar_sessao_maquina explicitamente;
 //    3. limpa a sessao local e volta a aguardar outro usuario.
-//
-// A chamada de encerramento e mantida mesmo que registrar_coleta
-// ja feche a sessao, porque assim garantimos a sincronizacao com
-// o aplicativo quando o contrato do banco mudar.
 // ============================================================
 
 #define OLED_SDA 21
@@ -46,18 +42,9 @@
 #define LDR_LIMITE 1500
 
 const float GRAMAS_POR_TAMPA = 13.0f;
-
-// Peso minimo para considerar que existe um deposito na balanca.
 const float BALANCA_MIN_GRAMAS = 5.0f;
-
-// A leitura precisa permanecer acima do minimo por este tempo
-// para evitar contar ruido do ADC como uma coleta.
 const unsigned long BALANCA_ESTABILIDADE_MS = 1200;
-
-// Depois de registrar uma carga na balanca, ela precisa voltar
-// praticamente a zero antes que outra carga possa ser registrada.
 const float BALANCA_RESET_GRAMAS = 3.0f;
-
 const unsigned long INTERVALO_SESSAO = 1500;
 const unsigned long DEBOUNCE_LDR = 500;
 const unsigned long DEBOUNCE_BOTAO = 500;
@@ -84,11 +71,9 @@ bool sessaoAtiva = false;
 bool envioFinalEmAndamento = false;
 bool ldrBloqueado = false;
 bool botaoAnterior = HIGH;
-
-// Controle do modo balanca.
 bool balancaCargaRegistrada = false;
-unsigned long inicioPesoEstavel = 0;
 
+unsigned long inicioPesoEstavel = 0;
 unsigned long totalPeso = 0;
 unsigned long totalTampinhas = 0;
 unsigned long totalPassagens = 0;
@@ -450,9 +435,6 @@ void detectarLdr() {
   if (bloqueado && !ldrBloqueado && millis() - ultimoLdr >= DEBOUNCE_LDR) {
     ldrBloqueado = true;
     ultimoLdr = millis();
-
-    // No modo de passagem, a regra e sempre 1 passagem = 1 tampinha.
-    // O peso da balanca nao entra nesta conta.
     registrarPassagemLdr();
   }
 
@@ -464,21 +446,17 @@ void detectarLdr() {
 void detectarBalanca() {
   float peso = lerPeso();
 
-  // Se o usuario estiver usando o LDR, nao tentamos criar uma segunda
-  // coleta pela balanca no mesmo instante.
   if (ldrBloqueado) {
     inicioPesoEstavel = 0;
     return;
   }
 
-  // A carga foi retirada. Libera a balanca para o proximo deposito.
   if (peso <= BALANCA_RESET_GRAMAS) {
     balancaCargaRegistrada = false;
     inicioPesoEstavel = 0;
     return;
   }
 
-  // Ja registramos esta carga; aguardamos ela voltar a zero.
   if (balancaCargaRegistrada) return;
 
   if (peso < BALANCA_MIN_GRAMAS) {
@@ -486,7 +464,6 @@ void detectarBalanca() {
     return;
   }
 
-  // Comeca a janela de estabilidade.
   if (inicioPesoEstavel == 0) {
     inicioPesoEstavel = millis();
     return;
@@ -508,9 +485,8 @@ void detectarBalanca() {
   Serial.print("Peso desta carga: ");
   Serial.print(peso, 1);
   Serial.println(" g");
-  Serial.print("Regra: ");
-  Serial.print(quantidade);
-  Serial.println(" tampinha(s) = ceil(peso / 13)");
+  Serial.print("Tampinhas desta carga: ");
+  Serial.println(quantidade);
   Serial.print("TOTAL TAMPINHAS: ");
   Serial.println(totalTampinhas);
   Serial.print("TOTAL PESO: ");
@@ -524,10 +500,6 @@ void detectarBalanca() {
 
 void detectarPassagem() {
   if (!sessaoAtiva || envioFinalEmAndamento) return;
-
-  // Os dois metodos podem ser usados na mesma sessao.
-  // LDR: uma passagem = uma tampinha.
-  // Balanca: uma carga = ceil(peso / 13) tampinhas.
   detectarLdr();
   detectarBalanca();
 }
@@ -543,8 +515,6 @@ bool encerrarSessaoNaMaquina() {
   String body;
   serializeJson(req, body);
 
-  // Tenta mais de uma vez porque a prioridade e garantir que o aplicativo
-  // veja status=concluida mesmo se houver uma falha momentanea de rede.
   for (int tentativa = 1; tentativa <= 3; tentativa++) {
     int codigo = 0;
     String resposta = chamarRPC("encerrar_sessao_maquina", body, &codigo);
@@ -585,15 +555,11 @@ bool enviarResultadoEFecharSessao() {
   Serial.print("PASSAGENS/CARGAS: ");
   Serial.println(totalPassagens);
 
-  // Contrato da RPC registrar_coleta:
-  // p_machine_id, p_device_token, p_session_id, p_tipo_coleta,
-  // p_quantidade_real, p_quantidade_estimada,
-  // p_peso_real_gramas, p_peso_estimado_gramas.
   JsonDocument req;
   req["p_machine_id"] = machineId;
   req["p_device_token"] = deviceToken;
   req["p_session_id"] = sessionId;
-  req["p_tipo_coleta"] = "unidade";
+  req["p_tipo_coleta"] = "unitaria";
   req["p_quantidade_real"] = (int)totalTampinhas;
   req["p_quantidade_estimada"] = nullptr;
   req["p_peso_real_gramas"] = (double)totalPeso;
@@ -619,8 +585,6 @@ bool enviarResultadoEFecharSessao() {
   Serial.print("COLLECTION_ID/RESPOSTA: ");
   Serial.println(resposta);
 
-  // Nao dependemos somente do registrar_coleta para fechar a sessao.
-  // Esta chamada sincroniza explicitamente o status com o aplicativo.
   bool sessaoFechada = encerrarSessaoNaMaquina();
 
   if (!sessaoFechada) {
@@ -674,7 +638,6 @@ void verificarSessao() {
     if (!sessaoAtiva) {
       iniciarNovaSessao(novaId, novoUser, novoNome, novoEvento);
     } else if (sessionId != novaId) {
-      // Nao troca de usuario no meio de uma coleta local.
       Serial.println("ATENCAO: outra sessao apareceu enquanto a atual esta ativa.");
       Serial.println("A sessao atual continua sendo usada ate o botao finalizar.");
     }
