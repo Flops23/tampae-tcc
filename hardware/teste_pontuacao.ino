@@ -11,14 +11,14 @@
 // ============================================================
 // TAMPAE - TESTE DE PONTUACAO
 // ============================================================
-// Durante a sessao, NENHUMA coleta vai para o banco.
-// O ESP32 acumula peso/quantidade localmente.
-// Ao finalizar pelo botao OU quando o celular fechar a sessao,
-// o ESP32 envia UMA unica chamada registrar_coleta.
+// Durante a sessao nenhuma coleta e enviada ao banco.
+// O ESP32 acumula tudo localmente.
+// Ao apertar o BOTAO, o ESP32 envia UMA unica registrar_coleta.
+// A RPC grava a coleta e, na mesma transacao, fecha a sessao.
 //
 // 13 g = 1 tampinha.
-// A quantidade de cada passagem e arredondada PARA CIMA.
-// Ex.: 13g=1, 26g=2, 27g=3, 40g=4.
+// Cada passagem usa ceil(peso / 13).
+// Exemplos: 13g=1, 26g=2, 27g=3, 40g=4.
 // ============================================================
 
 #define OLED_SDA 21
@@ -51,15 +51,13 @@ WebServer server(80);
 String machineId;
 String deviceToken;
 String qrPayload;
-
 String sessionId;
 String userId;
 String nomeUsuario;
 String eventoSessao;
-String ultimaSessionId;
 
 bool sessaoAtiva = false;
-bool finalizacaoEmAndamento = false;
+bool envioFinalEmAndamento = false;
 bool ldrBloqueado = false;
 bool botaoAnterior = HIGH;
 
@@ -74,7 +72,7 @@ void oledMessage(const String& a, const String& b="", const String& c="", const 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   display.println(a);
   if (b.length()) display.println(b);
   if (c.length()) display.println(c);
@@ -86,12 +84,12 @@ void mostrarAguardando() {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(2);
-  display.setCursor(24,2);
+  display.setCursor(24, 2);
   display.println("TAMPAE");
   display.setTextSize(1);
-  display.setCursor(15,30);
+  display.setCursor(15, 30);
   display.println("Aguardando usuario");
-  display.setCursor(27,46);
+  display.setCursor(27, 46);
   display.println("Leia o QR");
   display.display();
 }
@@ -100,33 +98,33 @@ void mostrarSessao() {
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
-  display.setCursor(0,0);
+  display.setCursor(0, 0);
   display.print("Usuario: ");
   display.println(nomeUsuario.length() ? nomeUsuario : "Conectado");
-  display.setCursor(0,14);
+  display.setCursor(0, 14);
   display.print("Tampinhas: ");
   display.println(totalTampinhas);
-  display.setCursor(0,28);
+  display.setCursor(0, 28);
   display.print("Peso total: ");
   display.print(totalPeso);
   display.println("g");
-  display.setCursor(0,42);
+  display.setCursor(0, 42);
   display.print("Passagens: ");
   display.println(totalPassagens);
-  display.setCursor(0,56);
+  display.setCursor(0, 56);
   display.println("Botao = finalizar");
   display.display();
 }
 
 String restUrl(const String& tabela) {
   String base = SUPABASE_URL;
-  while (base.endsWith("/")) base.remove(base.length()-1);
+  while (base.endsWith("/")) base.remove(base.length() - 1);
   return base + "/rest/v1/" + tabela;
 }
 
 String rpcUrl(const String& rpc) {
   String base = SUPABASE_URL;
-  while (base.endsWith("/")) base.remove(base.length()-1);
+  while (base.endsWith("/")) base.remove(base.length() - 1);
   return base + "/rest/v1/rpc/" + rpc;
 }
 
@@ -138,43 +136,56 @@ void headers(HTTPClient& http) {
 
 bool conectarWiFi() {
   if (WiFi.status() == WL_CONNECTED) return true;
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   Serial.print("Conectando Wi-Fi");
   unsigned long inicio = millis();
-  while (WiFi.status() != WL_CONNECTED && millis()-inicio < 15000) {
+  while (WiFi.status() != WL_CONNECTED && millis() - inicio < 15000) {
     delay(300);
     Serial.print(".");
   }
   Serial.println();
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.print("Wi-Fi OK. IP: ");
     Serial.println(WiFi.localIP());
     return true;
   }
+
   Serial.println("Falha Wi-Fi.");
   return false;
 }
 
-String chamarRPC(const char* nome, const String& body, int* codigoOut=nullptr) {
+String chamarRPC(const char* nome, const String& body, int* codigoOut = nullptr) {
   HTTPClient http;
   if (!http.begin(rpcUrl(nome))) return "";
+
   headers(http);
   int codigo = http.POST(body);
   String resposta = http.getString();
   http.end();
+
   if (codigoOut) *codigoOut = codigo;
+
   Serial.print("RPC ");
   Serial.print(nome);
   Serial.print(" HTTP: ");
   Serial.println(codigo);
-  if (codigo < 200 || codigo >= 300) Serial.println(resposta);
+
+  if (codigo < 200 || codigo >= 300) {
+    Serial.print("RPC resposta: ");
+    Serial.println(resposta);
+  }
+
   return resposta;
 }
 
 bool criarMaquina() {
   HTTPClient http;
   if (!http.begin(restUrl("machines"))) return false;
+
   headers(http);
   http.addHeader("Prefer", "return=representation");
 
@@ -186,25 +197,33 @@ bool criarMaquina() {
 
   String body;
   serializeJson(req, body);
+
   int codigo = http.POST(body);
   String resposta = http.getString();
   http.end();
 
-  Serial.print("machines HTTP: "); Serial.println(codigo);
-  Serial.print("machines resposta: "); Serial.println(resposta);
+  Serial.print("machines HTTP: ");
+  Serial.println(codigo);
+  Serial.print("machines resposta: ");
+  Serial.println(resposta);
+
   if (codigo < 200 || codigo >= 300) return false;
 
   JsonDocument doc;
   if (deserializeJson(doc, resposta)) return false;
+
   JsonObject row;
   if (doc.is<JsonArray>()) {
     JsonArray a = doc.as<JsonArray>();
     if (!a.size()) return false;
     row = a[0].as<JsonObject>();
-  } else row = doc.as<JsonObject>();
+  } else {
+    row = doc.as<JsonObject>();
+  }
 
   machineId = row["id"] | "";
   deviceToken = row["device_token"] | "";
+
   if (!machineId.length() || !deviceToken.length()) return false;
 
   qrPayload = String("{\"machine_id\":\"") + machineId +
@@ -212,15 +231,23 @@ bool criarMaquina() {
 
   Serial.println("========================================");
   Serial.println("MAQUINA CRIADA");
-  Serial.print("MACHINE_ID: "); Serial.println(machineId);
-  Serial.print("DEVICE_TOKEN: "); Serial.println(deviceToken);
-  Serial.print("EVENT_ID: "); Serial.println(EVENT_ID);
+  Serial.print("MACHINE_ID: ");
+  Serial.println(machineId);
+  Serial.print("DEVICE_TOKEN: ");
+  Serial.println(deviceToken);
+  Serial.print("EVENT_ID: ");
+  Serial.println(EVENT_ID);
   Serial.println("========================================");
+
   return true;
 }
 
 String makeQrSvg() {
-  struct Capture { int size; bool modules[177][177]; };
+  struct Capture {
+    int size;
+    bool modules[177][177];
+  };
+
   static Capture capture;
   capture.size = 0;
 
@@ -229,28 +256,35 @@ String makeQrSvg() {
   config.qrcode_ecc_level = ESP_QRCODE_ECC_LOW;
   config.display_func = [](esp_qrcode_handle_t qr) {
     capture.size = esp_qrcode_get_size(qr);
-    for (int y=0; y<capture.size; y++)
-      for (int x=0; x<capture.size; x++)
-        capture.modules[y][x] = esp_qrcode_get_module(qr,x,y);
+    for (int y = 0; y < capture.size; y++) {
+      for (int x = 0; x < capture.size; x++) {
+        capture.modules[y][x] = esp_qrcode_get_module(qr, x, y);
+      }
+    }
   };
 
-  if (esp_qrcode_generate(&config, qrPayload.c_str()) != ESP_OK || capture.size <= 0)
+  if (esp_qrcode_generate(&config, qrPayload.c_str()) != ESP_OK || capture.size <= 0) {
     return "<p>Erro ao gerar QR.</p>";
+  }
 
   const int margem = 4;
-  int full = capture.size + margem*2;
+  int full = capture.size + margem * 2;
   String svg;
-  svg.reserve(full*full/2);
+  svg.reserve(full * full / 2);
   svg += "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ";
   svg += String(full) + " " + String(full) + "' shape-rendering='crispEdges' class='qr'>";
   svg += "<rect width='100%' height='100%' fill='white'/>";
-  for (int y=0; y<capture.size; y++) {
-    for (int x=0; x<capture.size; x++) {
+
+  for (int y = 0; y < capture.size; y++) {
+    for (int x = 0; x < capture.size; x++) {
       if (capture.modules[y][x]) {
-        svg += "<rect x='" + String(x+margem) + "' y='" + String(y+margem) + "' width='1' height='1' fill='black'/>";
+        svg += "<rect x='" + String(x + margem) +
+               "' y='" + String(y + margem) +
+               "' width='1' height='1' fill='black'/>";
       }
     }
   }
+
   svg += "</svg>";
   return svg;
 }
@@ -258,7 +292,8 @@ String makeQrSvg() {
 void handleRoot() {
   String svg = makeQrSvg();
   String page;
-  page.reserve(svg.length()+2200);
+  page.reserve(svg.length() + 2200);
+
   page += "<!doctype html><html lang='pt-BR'><head><meta charset='utf-8'>";
   page += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
   page += "<title>TampAê - Teste</title><style>";
@@ -266,21 +301,26 @@ void handleRoot() {
   page += svg;
   page += "<div class='title'>TAMPAÊ - TESTE</div><div class='hint'>Escaneie para iniciar a sessão</div>";
   page += "<div class='id'>" + machineId + "</div></main></body></html>";
-  server.send(200,"text/html; charset=utf-8",page);
+
+  server.send(200, "text/html; charset=utf-8", page);
 }
 
 void handleInfo() {
-  String json = "{\"machine_id\":\""+machineId+"\",\"event_id\":\""+String(EVENT_ID)+"\",\"ip\":\""+WiFi.localIP().toString()+"\"}";
-  server.send(200,"application/json",json);
+  String json = String("{\"machine_id\":\"") + machineId +
+                "\",\"event_id\":\"" + EVENT_ID +
+                "\",\"ip\":\"" + WiFi.localIP().toString() + "\"}";
+  server.send(200, "application/json", json);
 }
 
 void iniciarServidor() {
-  server.on("/",HTTP_GET,handleRoot);
-  server.on("/info",HTTP_GET,handleInfo);
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/info", HTTP_GET, handleInfo);
   server.begin();
+
   Serial.println("========================================");
   Serial.println("SERVIDOR WEB INICIADO");
-  Serial.print("URL: http://"); Serial.println(WiFi.localIP());
+  Serial.print("URL: http://");
+  Serial.println(WiFi.localIP());
   Serial.println("========================================");
 }
 
@@ -292,212 +332,255 @@ void zerarAcumulador() {
 }
 
 bool lerSessaoAtiva(String& novaId, String& novoUser, String& novoNome, String& novoEvento) {
-  novaId=""; novoUser=""; novoNome=""; novoEvento="";
+  novaId = "";
+  novoUser = "";
+  novoNome = "";
+  novoEvento = "";
+
   JsonDocument req;
   req["p_machine_id"] = machineId;
   req["p_device_token"] = deviceToken;
-  String body;
-  serializeJson(req,body);
 
-  int codigo=0;
-  String resposta = chamarRPC("get_active_session",body,&codigo);
+  String body;
+  serializeJson(req, body);
+
+  int codigo = 0;
+  String resposta = chamarRPC("get_active_session", body, &codigo);
   if (codigo < 200 || codigo >= 300 || !resposta.length()) return false;
 
   JsonDocument doc;
-  if (deserializeJson(doc,resposta)) return false;
+  if (deserializeJson(doc, resposta)) return false;
   if (!doc.is<JsonArray>()) return false;
-  JsonArray a=doc.as<JsonArray>();
-  if (!a.size()) return false;
-  JsonObject s=a[0].as<JsonObject>();
 
+  JsonArray a = doc.as<JsonArray>();
+  if (!a.size()) return false;
+
+  JsonObject s = a[0].as<JsonObject>();
   novaId = s["session_id"] | "";
   novoUser = s["user_id"] | "";
   novoNome = s["nome"] | "";
   novoEvento = s["evento_id"] | "";
-  return novaId.length()>0;
+
+  return novaId.length() > 0;
 }
 
-void iniciarNovaSessao(const String& id,const String& uid,const String& nome,const String& evento) {
-  sessionId=id; userId=uid; nomeUsuario=nome; eventoSessao=evento;
-  sessaoAtiva=true; finalizacaoEmAndamento=false;
+void iniciarNovaSessao(const String& id, const String& uid, const String& nome, const String& evento) {
+  sessionId = id;
+  userId = uid;
+  nomeUsuario = nome;
+  eventoSessao = evento;
+
+  sessaoAtiva = true;
+  envioFinalEmAndamento = false;
   zerarAcumulador();
+
   Serial.println();
   Serial.println("========================================");
   Serial.println("USUARIO CONECTADO");
-  Serial.print("NOME: "); Serial.println(nomeUsuario);
-  Serial.print("EVENTO_ID: "); Serial.println(eventoSessao);
-  Serial.print("SESSION_ID: "); Serial.println(sessionId);
+  Serial.print("NOME: ");
+  Serial.println(nomeUsuario.length() ? nomeUsuario : userId);
+  Serial.print("EVENTO_ID: ");
+  Serial.println(eventoSessao.length() ? eventoSessao : "NULL");
+  Serial.print("SESSION_ID: ");
+  Serial.println(sessionId);
   Serial.println("Coletas serao acumuladas localmente.");
   Serial.println("========================================");
+
   mostrarSessao();
 }
 
 float lerPeso() {
-  int adc=analogRead(BALANCA_PIN);
-  return (adc/4095.0f)*1000.0f;
+  int adc = analogRead(BALANCA_PIN);
+  return (adc / 4095.0f) * 1000.0f;
 }
 
 void detectarPassagem() {
-  if (!sessaoAtiva || finalizacaoEmAndamento) return;
-  int ldr=analogRead(LDR_PIN);
-  bool bloqueado=(ldr < LDR_LIMITE);
+  if (!sessaoAtiva || envioFinalEmAndamento) return;
 
-  if (bloqueado && !ldrBloqueado && millis()-ultimoLdr>=DEBOUNCE_LDR) {
-    ldrBloqueado=true;
-    ultimoLdr=millis();
+  int ldr = analogRead(LDR_PIN);
+  bool bloqueado = (ldr < LDR_LIMITE);
 
-    float peso=lerPeso();
-    unsigned long qtd=(peso>0.0f) ? (unsigned long)ceil(peso/GRAMAS_POR_TAMPA) : 0;
+  if (bloqueado && !ldrBloqueado && millis() - ultimoLdr >= DEBOUNCE_LDR) {
+    ldrBloqueado = true;
+    ultimoLdr = millis();
+
+    float peso = lerPeso();
+    unsigned long quantidade = peso > 0.0f
+        ? (unsigned long)ceil(peso / GRAMAS_POR_TAMPA)
+        : 0;
 
     totalPeso += (unsigned long)round(peso);
-    totalTampinhas += qtd;
+    totalTampinhas += quantidade;
     totalPassagens++;
 
     Serial.println();
     Serial.println("TAMPINHA DETECTADA");
-    Serial.print("LDR: "); Serial.println(ldr);
-    Serial.print("Peso desta passagem: "); Serial.print(peso,1); Serial.println(" g");
-    Serial.print("Tampinhas desta passagem: "); Serial.println(qtd);
-    Serial.print("TOTAL TAMPINHAS: "); Serial.println(totalTampinhas);
-    Serial.print("TOTAL PESO: "); Serial.print(totalPeso); Serial.println(" g");
+    Serial.print("LDR: ");
+    Serial.println(ldr);
+    Serial.print("Peso desta passagem: ");
+    Serial.print(peso, 1);
+    Serial.println(" g");
+    Serial.print("Tampinhas desta passagem: ");
+    Serial.println(quantidade);
+    Serial.print("TOTAL TAMPINHAS: ");
+    Serial.println(totalTampinhas);
+    Serial.print("TOTAL PESO: ");
+    Serial.print(totalPeso);
+    Serial.println(" g");
     Serial.println("NAO enviado ao banco.");
+
     mostrarSessao();
   }
 
-  if (!bloqueado && ldrBloqueado) ldrBloqueado=false;
+  // Libera a próxima passagem somente depois que o LDR voltar ao normal.
+  if (!bloqueado && ldrBloqueado) {
+    ldrBloqueado = false;
+  }
 }
 
-// Usa a mesma RPC que o firmware anterior ja utilizava, mas SOMENTE UMA VEZ,
-// no final. Os campos representam o lote inteiro acumulado.
-bool enviarResultadoFinal() {
-  if (!sessionId.length()) return false;
-  if (totalTampinhas==0 && totalPeso==0) {
-    Serial.println("Sessao terminou sem coleta. Nada para enviar.");
-    return true;
-  }
+bool enviarResultadoEFecharSessao() {
+  if (!sessaoAtiva || envioFinalEmAndamento) return false;
 
+  envioFinalEmAndamento = true;
+
+  Serial.println();
+  Serial.println("========================================");
+  Serial.println("FINALIZANDO SESSAO PELO ESP32");
+  Serial.println("Uma unica chamada sera enviada ao servidor.");
+  Serial.print("SESSION_ID: ");
+  Serial.println(sessionId);
+  Serial.print("TAMPINHAS: ");
+  Serial.println(totalTampinhas);
+  Serial.print("PESO TOTAL: ");
+  Serial.print(totalPeso);
+  Serial.println(" g");
+  Serial.print("PASSAGENS: ");
+  Serial.println(totalPassagens);
+
+  // Contrato REAL da RPC registrar_coleta no banco:
+  // p_machine_id, p_device_token, p_session_id, p_tipo_coleta,
+  // p_quantidade_real, p_quantidade_estimada,
+  // p_peso_real_gramas, p_peso_estimado_gramas.
+  // A própria RPC grava a collection e muda machine_sessions
+  // para 'concluida' na mesma transação.
   JsonDocument req;
   req["p_machine_id"] = machineId;
   req["p_device_token"] = deviceToken;
   req["p_session_id"] = sessionId;
   req["p_tipo_coleta"] = "unitaria";
-  req["p_quantidade_real"] = totalTampinhas;
+  req["p_quantidade_real"] = (int)totalTampinhas;
   req["p_quantidade_estimada"] = nullptr;
-  req["p_peso_real_gramas"] = nullptr;
-  req["p_peso_estimado_gramas"] = totalPeso;
+  req["p_peso_real_gramas"] = (double)totalPeso;
+  req["p_peso_estimado_gramas"] = nullptr;
 
   String body;
-  serializeJson(req,body);
+  serializeJson(req, body);
 
-  Serial.println();
-  Serial.println("========================================");
-  Serial.println("ENVIO UNICO AO BANCO");
-  Serial.print("SESSION_ID: "); Serial.println(sessionId);
-  Serial.print("TAMPINHAS: "); Serial.println(totalTampinhas);
-  Serial.print("PESO TOTAL: "); Serial.print(totalPeso); Serial.println(" g");
-  Serial.print("BODY: "); Serial.println(body);
+  Serial.print("BODY FINAL: ");
+  Serial.println(body);
 
-  int codigo=0;
-  String resposta=chamarRPC("registrar_coleta",body,&codigo);
-  if (codigo>=200 && codigo<300 && resposta.length()) {
-    Serial.println("RESULTADO FINAL ENVIADO UMA UNICA VEZ.");
+  int codigo = 0;
+  String resposta = chamarRPC("registrar_coleta", body, &codigo);
+
+  if (codigo >= 200 && codigo < 300) {
+    Serial.println("========================================");
+    Serial.println("COLETA FINAL ENVIADA COM SUCESSO");
+    Serial.print("COLLECTION_ID: ");
     Serial.println(resposta);
+    Serial.println("A RPC gravou a coleta e fechou a sessao.");
+    Serial.println("STATUS ESPERADO DA SESSAO: concluida");
+    Serial.println("========================================");
+
+    sessaoAtiva = false;
+    envioFinalEmAndamento = false;
+    sessionId = "";
+    userId = "";
+    nomeUsuario = "";
+    eventoSessao = "";
+    zerarAcumulador();
+    mostrarAguardando();
     return true;
   }
-  Serial.println("FALHA NO ENVIO FINAL. O acumulado continua na memoria para nova tentativa.");
+
+  Serial.println("ERRO: a coleta final NAO foi gravada.");
+  Serial.println("A sessao permanece localmente ativa para tentar novamente.");
+  envioFinalEmAndamento = false;
   return false;
 }
 
-void finalizarSessao(const char* motivo) {
-  if (!sessaoAtiva || finalizacaoEmAndamento) return;
-  finalizacaoEmAndamento=true;
-
-  Serial.println();
-  Serial.println("========================================");
-  Serial.print("FINALIZANDO: "); Serial.println(motivo);
-  Serial.print("TAMPINHAS ACUMULADAS: "); Serial.println(totalTampinhas);
-  Serial.print("PESO ACUMULADO: "); Serial.print(totalPeso); Serial.println(" g");
-  Serial.println("========================================");
-
-  if (enviarResultadoFinal()) {
-    sessaoAtiva=false;
-    ultimaSessionId=sessionId;
-    sessionId="";
-    userId="";
-    nomeUsuario="";
-    eventoSessao="";
-    zerarAcumulador();
-    finalizacaoEmAndamento=false;
-    mostrarAguardando();
-    Serial.println("Sessao local encerrada. Aguardando nova sessao.");
-  } else {
-    finalizacaoEmAndamento=false;
-  }
-}
-
 void verificarBotao() {
-  bool atual=digitalRead(BOTAO_PIN);
-  if (botaoAnterior==HIGH && atual==LOW && millis()-ultimoBotao>=DEBOUNCE_BOTAO) {
-    ultimoBotao=millis();
-    delay(30);
-    if (digitalRead(BOTAO_PIN)==LOW) finalizarSessao("BOTAO DA MAQUINA");
+  bool atual = digitalRead(BOTAO_PIN);
+
+  if (botaoAnterior == HIGH && atual == LOW && millis() - ultimoBotao >= DEBOUNCE_BOTAO) {
+    ultimoBotao = millis();
+
+    if (sessaoAtiva) {
+      Serial.println("BOTAO: finalizar sessao solicitado.");
+      enviarResultadoEFecharSessao();
+    } else {
+      Serial.println("BOTAO pressionado, mas nao existe sessao ativa.");
+    }
   }
-  botaoAnterior=atual;
+
+  botaoAnterior = atual;
 }
 
 void verificarSessao() {
-  if (finalizacaoEmAndamento) return;
+  if (envioFinalEmAndamento) return;
 
-  String novaId,novoUser,novoNome,novoEvento;
-  bool encontrou=lerSessaoAtiva(novaId,novoUser,novoNome,novoEvento);
+  String novaId, novoUser, novoNome, novoEvento;
+  bool encontrou = lerSessaoAtiva(novaId, novoUser, novoNome, novoEvento);
 
   if (encontrou) {
     if (!sessaoAtiva) {
-      iniciarNovaSessao(novaId,novoUser,novoNome,novoEvento);
-    } else if (novaId!=sessionId) {
-      Serial.println("Nova sessao detectada.");
-      iniciarNovaSessao(novaId,novoUser,novoNome,novoEvento);
+      iniciarNovaSessao(novaId, novoUser, novoNome, novoEvento);
+    } else if (sessionId != novaId) {
+      // Segurança: não troca de sessão no meio de uma coleta local.
+      Serial.println("ATENCAO: outra sessao apareceu enquanto a atual esta ativa.");
+      Serial.println("A sessao atual continua sendo usada ate o botao finalizar.");
     }
-    return;
+  } else if (!sessaoAtiva) {
+    mostrarAguardando();
   }
-
-  // Se o celular fechou a sessao, o ESP32 detecta que ela desapareceu
-  // e faz o unico envio do acumulado.
-  if (sessaoAtiva) finalizarSessao("SESSAO FECHADA PELO CELULAR");
-  else mostrarAguardando();
 }
 
 void setup() {
   Serial.begin(115200);
   delay(300);
 
-  pinMode(LDR_PIN,INPUT);
-  pinMode(BALANCA_PIN,INPUT);
-  pinMode(BOTAO_PIN,INPUT_PULLUP);
+  pinMode(LDR_PIN, INPUT);
+  pinMode(BALANCA_PIN, INPUT);
+  pinMode(BOTAO_PIN, INPUT_PULLUP);
 
-  Wire.begin(OLED_SDA,OLED_SCL);
-  if (!display.begin(SSD1306_SWITCHCAPVCC,OLED_ADDRESS)) {
+  Wire.begin(OLED_SDA, OLED_SCL);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS)) {
     Serial.println("ERRO: OLED nao encontrado.");
-    while(true) delay(1000);
+    while (true) delay(1000);
   }
 
-  oledMessage("TAMPAE","Teste pontuacao","Iniciando...");
+  oledMessage("TAMPAE", "Teste pontuacao");
 
   if (!conectarWiFi()) {
-    oledMessage("TAMPAE","Falha Wi-Fi");
+    oledMessage("TAMPAE", "Falha Wi-Fi");
     return;
   }
 
-  oledMessage("TAMPAE","Criando maquina...");
   if (!criarMaquina()) {
-    oledMessage("TAMPAE","Erro machine");
+    oledMessage("TAMPAE", "Erro maquina");
     return;
   }
 
+  // O servidor web e iniciado antes de qualquer outra etapa.
   iniciarServidor();
   mostrarAguardando();
+
+  Serial.println("========================================");
+  Serial.println("PRONTO PARA TESTE");
   Serial.print("Abra no celular: http://");
   Serial.println(WiFi.localIP());
+  Serial.println("Escaneie o QR para criar a sessao.");
+  Serial.println("========================================");
 }
 
 void loop() {
@@ -505,16 +588,16 @@ void loop() {
   verificarBotao();
   detectarPassagem();
 
-  if (WiFi.status()!=WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED) {
     conectarWiFi();
     delay(500);
     return;
   }
 
-  if (millis()-ultimaConsulta>=INTERVALO_SESSAO) {
-    ultimaConsulta=millis();
+  if (millis() - ultimaConsulta >= INTERVALO_SESSAO) {
+    ultimaConsulta = millis();
     verificarSessao();
   }
 
-  delay(5);
+  delay(2);
 }
