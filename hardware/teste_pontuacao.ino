@@ -11,14 +11,26 @@
 // ============================================================
 // TAMPAE - TESTE DE PONTUACAO
 // ============================================================
-// Durante a sessao nenhuma coleta e enviada ao banco.
-// O ESP32 acumula tudo localmente.
-// Ao apertar o BOTAO, o ESP32 envia UMA unica registrar_coleta.
-// A RPC grava a coleta e, na mesma transacao, fecha a sessao.
+// Existem DOIS modos independentes de deposito:
 //
-// 13 g = 1 tampinha.
-// Cada passagem usa ceil(peso / 13).
-// Exemplos: 13g=1, 26g=2, 27g=3, 40g=4.
+// 1) PASSAGEM / LDR:
+//    Cada passagem detectada pelo LDR = EXATAMENTE 1 tampinha.
+//    A balanca NAO altera essa contagem.
+//
+// 2) BALANCA:
+//    Quando houver peso na balanca sem uma passagem pelo LDR,
+//    a quantidade e calculada por 13 g = 1 tampinha.
+//    Exemplos: 13 g = 1, 26 g = 2, 27 g = 3, 40 g = 4.
+//
+// Durante a sessao as coletas ficam acumuladas localmente.
+// Ao apertar o BOTAO, o ESP32:
+//    1. envia UMA registrar_coleta;
+//    2. chama encerrar_sessao_maquina explicitamente;
+//    3. limpa a sessao local e volta a aguardar outro usuario.
+//
+// A chamada de encerramento e mantida mesmo que registrar_coleta
+// ja feche a sessao, porque assim garantimos a sincronizacao com
+// o aplicativo quando o contrato do banco mudar.
 // ============================================================
 
 #define OLED_SDA 21
@@ -34,6 +46,18 @@
 #define LDR_LIMITE 1500
 
 const float GRAMAS_POR_TAMPA = 13.0f;
+
+// Peso minimo para considerar que existe um deposito na balanca.
+const float BALANCA_MIN_GRAMAS = 5.0f;
+
+// A leitura precisa permanecer acima do minimo por este tempo
+// para evitar contar ruido do ADC como uma coleta.
+const unsigned long BALANCA_ESTABILIDADE_MS = 1200;
+
+// Depois de registrar uma carga na balanca, ela precisa voltar
+// praticamente a zero antes que outra carga possa ser registrada.
+const float BALANCA_RESET_GRAMAS = 3.0f;
+
 const unsigned long INTERVALO_SESSAO = 1500;
 const unsigned long DEBOUNCE_LDR = 500;
 const unsigned long DEBOUNCE_BOTAO = 500;
@@ -60,6 +84,10 @@ bool sessaoAtiva = false;
 bool envioFinalEmAndamento = false;
 bool ldrBloqueado = false;
 bool botaoAnterior = HIGH;
+
+// Controle do modo balanca.
+bool balancaCargaRegistrada = false;
+unsigned long inicioPesoEstavel = 0;
 
 unsigned long totalPeso = 0;
 unsigned long totalTampinhas = 0;
@@ -329,6 +357,8 @@ void zerarAcumulador() {
   totalTampinhas = 0;
   totalPassagens = 0;
   ldrBloqueado = false;
+  balancaCargaRegistrada = false;
+  inicioPesoEstavel = 0;
 }
 
 bool lerSessaoAtiva(String& novaId, String& novoUser, String& novoNome, String& novoEvento) {
@@ -383,6 +413,8 @@ void iniciarNovaSessao(const String& id, const String& uid, const String& nome, 
   Serial.println(eventoSessao.length() ? eventoSessao : "NULL");
   Serial.print("SESSION_ID: ");
   Serial.println(sessionId);
+  Serial.println("Modo LDR: cada passagem = 1 tampinha.");
+  Serial.println("Modo balanca: 13 g = 1 tampinha.");
   Serial.println("Coletas serao acumuladas localmente.");
   Serial.println("========================================");
 
@@ -394,9 +426,24 @@ float lerPeso() {
   return (adc / 4095.0f) * 1000.0f;
 }
 
-void detectarPassagem() {
-  if (!sessaoAtiva || envioFinalEmAndamento) return;
+void registrarPassagemLdr() {
+  totalTampinhas += 1;
+  totalPassagens += 1;
 
+  Serial.println();
+  Serial.println("TAMPINHA DETECTADA PELO LDR");
+  Serial.print("LDR: ");
+  Serial.println(analogRead(LDR_PIN));
+  Serial.println("Quantidade desta passagem: 1 tampinha");
+  Serial.print("TOTAL TAMPINHAS: ");
+  Serial.println(totalTampinhas);
+  Serial.println("Modo balanca NAO foi usado nesta passagem.");
+  Serial.println("NAO enviado ao banco.");
+
+  mostrarSessao();
+}
+
+void detectarLdr() {
   int ldr = analogRead(LDR_PIN);
   bool bloqueado = (ldr < LDR_LIMITE);
 
@@ -404,38 +451,119 @@ void detectarPassagem() {
     ldrBloqueado = true;
     ultimoLdr = millis();
 
-    float peso = lerPeso();
-    unsigned long quantidade = peso > 0.0f
-        ? (unsigned long)ceil(peso / GRAMAS_POR_TAMPA)
-        : 0;
-
-    totalPeso += (unsigned long)round(peso);
-    totalTampinhas += quantidade;
-    totalPassagens++;
-
-    Serial.println();
-    Serial.println("TAMPINHA DETECTADA");
-    Serial.print("LDR: ");
-    Serial.println(ldr);
-    Serial.print("Peso desta passagem: ");
-    Serial.print(peso, 1);
-    Serial.println(" g");
-    Serial.print("Tampinhas desta passagem: ");
-    Serial.println(quantidade);
-    Serial.print("TOTAL TAMPINHAS: ");
-    Serial.println(totalTampinhas);
-    Serial.print("TOTAL PESO: ");
-    Serial.print(totalPeso);
-    Serial.println(" g");
-    Serial.println("NAO enviado ao banco.");
-
-    mostrarSessao();
+    // No modo de passagem, a regra e sempre 1 passagem = 1 tampinha.
+    // O peso da balanca nao entra nesta conta.
+    registrarPassagemLdr();
   }
 
-  // Libera a próxima passagem somente depois que o LDR voltar ao normal.
   if (!bloqueado && ldrBloqueado) {
     ldrBloqueado = false;
   }
+}
+
+void detectarBalanca() {
+  float peso = lerPeso();
+
+  // Se o usuario estiver usando o LDR, nao tentamos criar uma segunda
+  // coleta pela balanca no mesmo instante.
+  if (ldrBloqueado) {
+    inicioPesoEstavel = 0;
+    return;
+  }
+
+  // A carga foi retirada. Libera a balanca para o proximo deposito.
+  if (peso <= BALANCA_RESET_GRAMAS) {
+    balancaCargaRegistrada = false;
+    inicioPesoEstavel = 0;
+    return;
+  }
+
+  // Ja registramos esta carga; aguardamos ela voltar a zero.
+  if (balancaCargaRegistrada) return;
+
+  if (peso < BALANCA_MIN_GRAMAS) {
+    inicioPesoEstavel = 0;
+    return;
+  }
+
+  // Comeca a janela de estabilidade.
+  if (inicioPesoEstavel == 0) {
+    inicioPesoEstavel = millis();
+    return;
+  }
+
+  if (millis() - inicioPesoEstavel < BALANCA_ESTABILIDADE_MS) return;
+
+  unsigned long quantidade = (unsigned long)ceil(peso / GRAMAS_POR_TAMPA);
+  if (quantidade == 0) return;
+
+  totalPeso += (unsigned long)round(peso);
+  totalTampinhas += quantidade;
+  totalPassagens += 1;
+  balancaCargaRegistrada = true;
+  inicioPesoEstavel = 0;
+
+  Serial.println();
+  Serial.println("DEPOSITO DETECTADO PELA BALANCA");
+  Serial.print("Peso desta carga: ");
+  Serial.print(peso, 1);
+  Serial.println(" g");
+  Serial.print("Regra: ");
+  Serial.print(quantidade);
+  Serial.println(" tampinha(s) = ceil(peso / 13)");
+  Serial.print("TOTAL TAMPINHAS: ");
+  Serial.println(totalTampinhas);
+  Serial.print("TOTAL PESO: ");
+  Serial.print(totalPeso);
+  Serial.println(" g");
+  Serial.println("Modo LDR nao foi usado nesta carga.");
+  Serial.println("NAO enviado ao banco.");
+
+  mostrarSessao();
+}
+
+void detectarPassagem() {
+  if (!sessaoAtiva || envioFinalEmAndamento) return;
+
+  // Os dois metodos podem ser usados na mesma sessao.
+  // LDR: uma passagem = uma tampinha.
+  // Balanca: uma carga = ceil(peso / 13) tampinhas.
+  detectarLdr();
+  detectarBalanca();
+}
+
+bool encerrarSessaoNaMaquina() {
+  if (!machineId.length() || !deviceToken.length() || !sessionId.length()) return false;
+
+  JsonDocument req;
+  req["p_machine_id"] = machineId;
+  req["p_device_token"] = deviceToken;
+  req["p_session_id"] = sessionId;
+
+  String body;
+  serializeJson(req, body);
+
+  // Tenta mais de uma vez porque a prioridade e garantir que o aplicativo
+  // veja status=concluida mesmo se houver uma falha momentanea de rede.
+  for (int tentativa = 1; tentativa <= 3; tentativa++) {
+    int codigo = 0;
+    String resposta = chamarRPC("encerrar_sessao_maquina", body, &codigo);
+
+    Serial.print("ENCERRAMENTO DA SESSAO - tentativa ");
+    Serial.print(tentativa);
+    Serial.print(" HTTP: ");
+    Serial.println(codigo);
+
+    if (codigo >= 200 && codigo < 300) {
+      Serial.print("Resposta encerrar_sessao_maquina: ");
+      Serial.println(resposta);
+      return true;
+    }
+
+    delay(300);
+  }
+
+  return false;
 }
 
 bool enviarResultadoEFecharSessao() {
@@ -446,7 +574,7 @@ bool enviarResultadoEFecharSessao() {
   Serial.println();
   Serial.println("========================================");
   Serial.println("FINALIZANDO SESSAO PELO ESP32");
-  Serial.println("Uma unica chamada sera enviada ao servidor.");
+  Serial.println("Uma unica registrar_coleta sera enviada.");
   Serial.print("SESSION_ID: ");
   Serial.println(sessionId);
   Serial.print("TAMPINHAS: ");
@@ -454,20 +582,18 @@ bool enviarResultadoEFecharSessao() {
   Serial.print("PESO TOTAL: ");
   Serial.print(totalPeso);
   Serial.println(" g");
-  Serial.print("PASSAGENS: ");
+  Serial.print("PASSAGENS/CARGAS: ");
   Serial.println(totalPassagens);
 
-  // Contrato REAL da RPC registrar_coleta no banco:
+  // Contrato da RPC registrar_coleta:
   // p_machine_id, p_device_token, p_session_id, p_tipo_coleta,
   // p_quantidade_real, p_quantidade_estimada,
   // p_peso_real_gramas, p_peso_estimado_gramas.
-  // A própria RPC grava a collection e muda machine_sessions
-  // para 'concluida' na mesma transação.
   JsonDocument req;
   req["p_machine_id"] = machineId;
   req["p_device_token"] = deviceToken;
   req["p_session_id"] = sessionId;
-  req["p_tipo_coleta"] = "unitaria";
+  req["p_tipo_coleta"] = "unidade";
   req["p_quantidade_real"] = (int)totalTampinhas;
   req["p_quantidade_estimada"] = nullptr;
   req["p_peso_real_gramas"] = (double)totalPeso;
@@ -482,30 +608,43 @@ bool enviarResultadoEFecharSessao() {
   int codigo = 0;
   String resposta = chamarRPC("registrar_coleta", body, &codigo);
 
-  if (codigo >= 200 && codigo < 300) {
-    Serial.println("========================================");
-    Serial.println("COLETA FINAL ENVIADA COM SUCESSO");
-    Serial.print("COLLECTION_ID: ");
-    Serial.println(resposta);
-    Serial.println("A RPC gravou a coleta e fechou a sessao.");
-    Serial.println("STATUS ESPERADO DA SESSAO: concluida");
-    Serial.println("========================================");
-
-    sessaoAtiva = false;
+  if (codigo < 200 || codigo >= 300) {
+    Serial.println("ERRO: a coleta final NAO foi gravada.");
+    Serial.println("A sessao permanece ativa para tentar novamente.");
     envioFinalEmAndamento = false;
-    sessionId = "";
-    userId = "";
-    nomeUsuario = "";
-    eventoSessao = "";
-    zerarAcumulador();
-    mostrarAguardando();
-    return true;
+    return false;
   }
 
-  Serial.println("ERRO: a coleta final NAO foi gravada.");
-  Serial.println("A sessao permanece localmente ativa para tentar novamente.");
+  Serial.println("COLETA FINAL ENVIADA COM SUCESSO");
+  Serial.print("COLLECTION_ID/RESPOSTA: ");
+  Serial.println(resposta);
+
+  // Nao dependemos somente do registrar_coleta para fechar a sessao.
+  // Esta chamada sincroniza explicitamente o status com o aplicativo.
+  bool sessaoFechada = encerrarSessaoNaMaquina();
+
+  if (!sessaoFechada) {
+    Serial.println("ERRO: coleta gravada, mas nao foi possivel confirmar o encerramento da sessao.");
+    Serial.println("A sessao local permanece ativa para nova tentativa.");
+    envioFinalEmAndamento = false;
+    return false;
+  }
+
+  Serial.println("========================================");
+  Serial.println("SESSAO ENCERRADA COM SUCESSO");
+  Serial.println("O aplicativo devera detectar status=concluida.");
+  Serial.println("========================================");
+
+  sessaoAtiva = false;
   envioFinalEmAndamento = false;
-  return false;
+  sessionId = "";
+  userId = "";
+  nomeUsuario = "";
+  eventoSessao = "";
+  zerarAcumulador();
+  mostrarAguardando();
+
+  return true;
 }
 
 void verificarBotao() {
@@ -535,7 +674,7 @@ void verificarSessao() {
     if (!sessaoAtiva) {
       iniciarNovaSessao(novaId, novoUser, novoNome, novoEvento);
     } else if (sessionId != novaId) {
-      // Segurança: não troca de sessão no meio de uma coleta local.
+      // Nao troca de usuario no meio de uma coleta local.
       Serial.println("ATENCAO: outra sessao apareceu enquanto a atual esta ativa.");
       Serial.println("A sessao atual continua sendo usada ate o botao finalizar.");
     }
@@ -571,7 +710,6 @@ void setup() {
     return;
   }
 
-  // O servidor web e iniciado antes de qualquer outra etapa.
   iniciarServidor();
   mostrarAguardando();
 
@@ -580,6 +718,11 @@ void setup() {
   Serial.print("Abra no celular: http://");
   Serial.println(WiFi.localIP());
   Serial.println("Escaneie o QR para criar a sessao.");
+  Serial.println();
+  Serial.println("REGRAS DE CONTAGEM:");
+  Serial.println("- LDR: cada passagem = 1 tampinha");
+  Serial.println("- BALANCA: cada 13 g = 1 tampinha");
+  Serial.println("- Os dois modos podem ser usados na mesma sessao");
   Serial.println("========================================");
 }
 
