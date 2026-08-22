@@ -1,10 +1,13 @@
+// Cliente do Supabase e proteção da página para usuários autenticados.
 import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
+// Estado da página: mapa, máquinas carregadas e marcadores atualmente exibidos.
 const state = { map: null, machines: [], markers: [] };
 
 const $ = (id) => document.getElementById(id);
 
+// Exibe uma mensagem temporária na interface.
 function showToast(message) {
     const toast = $("toast");
     if (!toast) return;
@@ -13,10 +16,12 @@ function showToast(message) {
     window.setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
+// Converte os códigos de status do banco para textos amigáveis.
 function formatStatus(status) {
     return ({ ativa: "Ativa", inativa: "Inativa", manutencao: "Em manutenção" })[status] ?? status;
 }
 
+// Calcula a distância aproximada entre duas coordenadas usando a fórmula de Haversine.
 function distanceKm(a, b) {
     const R = 6371;
     const dLat = (b.lat - a.lat) * Math.PI / 180;
@@ -27,6 +32,7 @@ function distanceKm(a, b) {
     return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
 
+// Abre o cartão da máquina selecionada e centraliza o mapa nela.
 function openMachine(machine) {
     $("routeName").textContent = machine.nome;
     $("routeDetails").textContent = `${formatStatus(machine.status)} • ${Number(machine.latitude).toFixed(5)}, ${Number(machine.longitude).toFixed(5)}`;
@@ -34,6 +40,7 @@ function openMachine(machine) {
     state.map.setView([machine.latitude, machine.longitude], 17);
 }
 
+// Remove marcadores antigos e cria um marcador para cada máquina carregada.
 function addMarkers() {
     state.markers.forEach((marker) => marker.remove());
     state.markers = [];
@@ -46,6 +53,7 @@ function addMarkers() {
     });
 }
 
+// Busca as máquinas cadastradas no Supabase e coloca seus marcadores no mapa.
 async function loadMachines() {
     const { data, error } = await supabase
         .from("machines")
@@ -66,6 +74,7 @@ async function loadMachines() {
     }
 }
 
+// Cria o mapa Leaflet e define a posição inicial e a camada do OpenStreetMap.
 function initMap() {
     state.map = L.map("map", { zoomControl: true }).setView([-15.78, -47.93], 5);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -74,6 +83,7 @@ function initMap() {
     }).addTo(state.map);
 }
 
+// Obtém a localização do usuário e encontra a máquina ativa mais próxima.
 async function locateNearest() {
     if (!state.machines.length) {
         showToast("Nenhuma máquina cadastrada.");
@@ -106,6 +116,7 @@ async function locateNearest() {
     );
 }
 
+// Inicializa a página somente depois da autenticação.
 async function init() {
     const user = await requireAuth();
     if (!user) return;
