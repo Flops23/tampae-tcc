@@ -1,12 +1,16 @@
+// Cliente do Supabase e proteção da página para usuários autenticados.
 import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
 const $ = (id) => document.getElementById(id);
 const AVATAR_BUCKET = "avatars";
+
+// Limites usados no processamento da foto de perfil.
 const MAX_INPUT_SIZE = 10 * 1024 * 1024;
 const MAX_OUTPUT_SIZE = 350 * 1024;
 const AVATAR_SIZE = 512;
 
+// Carrega os dados do usuário, perfil, conquistas e histórico.
 async function init() {
     const user = await requireAuth();
     if (!user) return;
@@ -28,6 +32,7 @@ async function init() {
     renderProfile(profile);
     await Promise.all([loadAchievements(user.id), loadHistory(user.id)]);
 
+    // Liga os controles da página às ações de foto e edição do nome.
     $("btnEditarFoto")?.addEventListener("click", () => $("inputFotoPerfil")?.click());
     $("inputFotoPerfil")?.addEventListener("change", async (event) => {
         const file = event.target.files?.[0];
@@ -47,6 +52,7 @@ async function init() {
     });
 }
 
+// Valida, comprime e envia a nova foto para o Storage do Supabase.
 async function updateProfilePhoto(user, file) {
     if (!file.type.startsWith("image/")) return alert("Selecione uma imagem válida.");
     if (file.size > MAX_INPUT_SIZE) return alert("A imagem original deve ter no máximo 10 MB.");
@@ -69,6 +75,7 @@ async function updateProfilePhoto(user, file) {
 
         if (uploadError) throw uploadError;
 
+        // O banco guarda apenas o caminho do arquivo, não a imagem em si.
         const { error: updateError } = await supabase
             .from("profiles")
             .update({ foto_path: path })
@@ -83,6 +90,7 @@ async function updateProfilePhoto(user, file) {
     }
 }
 
+// Redimensiona a imagem para um quadrado e reduz a qualidade até atingir o limite definido.
 async function compressImage(file) {
     const image = await loadImage(file);
     let size = Math.min(AVATAR_SIZE, image.naturalWidth, image.naturalHeight);
@@ -122,6 +130,7 @@ async function compressImage(file) {
     return blob;
 }
 
+// Converte o arquivo local em um objeto Image para poder processá-lo no canvas.
 function loadImage(file) {
     return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(file);
@@ -138,6 +147,7 @@ function loadImage(file) {
     });
 }
 
+// Preenche a interface com os dados do perfil e, se houver, a foto do Storage.
 function renderProfile(profile) {
     const nome = profile.nome || "Usuário";
     $("perfilNome").textContent = nome;
@@ -158,6 +168,7 @@ function renderProfile(profile) {
     }
 }
 
+// Carrega as conquistas e calcula a quantidade já concluída.
 async function loadAchievements(userId) {
     const { data, error } = await supabase.from("vw_conquistas_usuario").select("achievement_id,nome,descricao,tipo_meta,meta_valor,progresso_atual,conquistada").eq("user_id", userId).order("meta_valor");
     if (error) {
@@ -170,12 +181,14 @@ async function loadAchievements(userId) {
     const done = rows.filter((row) => row.conquistada).length;
     $("conquistasContagem").textContent = `${done}/${rows.length}`;
 
+    // Cada conquista vira um bloco visual com seu progresso.
     list.innerHTML = rows.length ? rows.map((row) => {
         const progress = Math.min(100, Number(row.meta_valor) ? Number(row.progresso_atual || 0) / Number(row.meta_valor) * 100 : 0);
         return `<div class="conquista ${row.conquistada ? "concluida" : ""}"><div class="conquista-icone"><span class="material-symbols-rounded">${row.conquistada ? "verified" : "emoji_events"}</span></div><b>${escapeHtml(row.nome)}</b><small>${escapeHtml(row.descricao || "")}</small><div class="barra"><span style="width:${progress}%"></span></div></div>`;
     }).join("") : `<div class="empty-state">Nenhuma conquista cadastrada ainda.</div>`;
 }
 
+// Busca as cinco coletas mais recentes do usuário para formar o histórico.
 async function loadHistory(userId) {
     const { data, error } = await supabase.from("collections").select("id,tipo_coleta,quantidade_real,quantidade_estimada,peso_real_gramas,peso_estimado_gramas,pontos,criado_em,machines(nome)").eq("user_id", userId).order("criado_em", { ascending: false }).limit(5);
     if (error) {
@@ -193,16 +206,19 @@ async function loadHistory(userId) {
     }).join("") : `<div class="empty-state">Você ainda não realizou coletas.</div>`;
 }
 
+// Formata o peso para a unidade mais adequada.
 function formatWeight(grams) {
     const value = Number(grams || 0);
     if (value >= 1000) return `${(value / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} kg`;
     return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} g`;
 }
 
+// Gera as iniciais do nome para o avatar quando não existe foto.
 function initials(name) {
     return String(name).trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+// Escapa caracteres HTML usados em dados vindos do banco.
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
 }
