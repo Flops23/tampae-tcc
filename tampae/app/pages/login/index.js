@@ -1,5 +1,7 @@
+// Importa o cliente Supabase para autenticação e acesso ao backend.
 import { supabase } from "../../js/supabase.js";
 
+// Referências aos elementos principais da tela de login/cadastro.
 const formLogin = document.getElementById("formLogin");
 const formCadastro = document.getElementById("formCadastro");
 const abaLogin = document.getElementById("abaLogin");
@@ -7,6 +9,7 @@ const abaCadastro = document.getElementById("abaCadastro");
 const linkParaCadastro = document.getElementById("linkParaCadastro");
 const linkParaLogin = document.getElementById("linkParaLogin");
 
+// Mostra uma mensagem de erro ou sucesso na interface.
 function mostrarMensagem(mensagem, tipo = "erro") {
     const elemento = document.getElementById("mensagem");
     if (!elemento) return;
@@ -15,6 +18,7 @@ function mostrarMensagem(mensagem, tipo = "erro") {
     elemento.hidden = false;
 }
 
+// Limpa e esconde a mensagem atual.
 function limparMensagem() {
     const elemento = document.getElementById("mensagem");
     if (!elemento) return;
@@ -22,6 +26,7 @@ function limparMensagem() {
     elemento.hidden = true;
 }
 
+// Desabilita/habilita o botão de envio e altera seu texto durante uma operação.
 function setLoading(form, loading) {
     if (!form) return;
     const botao = form.querySelector('button[type="submit"]');
@@ -38,6 +43,7 @@ function setLoading(form, loading) {
     if (texto) texto.textContent = loading ? "Aguarde..." : botao.dataset.textoOriginal;
 }
 
+// Alterna entre o formulário de login e o formulário de cadastro.
 function trocarModo(modo) {
     const cadastro = modo === "cadastro";
 
@@ -48,6 +54,7 @@ function trocarModo(modo) {
     limparMensagem();
 }
 
+// Configura os botões que permitem mostrar ou ocultar a senha digitada.
 function configurarToggleSenha() {
     document.querySelectorAll(".toggle-senha").forEach((botao) => {
         botao.addEventListener("click", () => {
@@ -63,6 +70,7 @@ function configurarToggleSenha() {
     });
 }
 
+// Registra o Service Worker responsável pelos recursos PWA/offline definidos no projeto.
 function registrarServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
 
@@ -71,14 +79,17 @@ function registrarServiceWorker() {
         .catch((error) => console.error("TampAê: erro ao registrar Service Worker:", error));
 }
 
+// Validação simples do formato do endereço de e-mail.
 function validarEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// Monta a URL da página inicial usando a localização atual do arquivo.
 function getHomeUrl() {
     return new URL("../inicio/home.html", window.location.href).href;
 }
 
+// Recupera um possível destino de redirecionamento e impede redirecionamentos externos.
 function getRedirectPath() {
     const redirect = new URLSearchParams(window.location.search).get("redirect");
     if (!redirect) return getHomeUrl();
@@ -96,6 +107,7 @@ function getRedirectPath() {
     return getHomeUrl();
 }
 
+// Verifica se já existe uma sessão autenticada antes de mostrar novamente o login.
 async function verificarSessaoExistente() {
     const { data, error } = await supabase.auth.getSession();
     if (error) {
@@ -105,6 +117,7 @@ async function verificarSessaoExistente() {
     if (data.session) window.location.replace(getRedirectPath());
 }
 
+// Valida os dados do formulário e autentica o usuário pelo Supabase Auth.
 async function fazerLogin(event) {
     event.preventDefault();
     limparMensagem();
@@ -140,6 +153,7 @@ async function fazerLogin(event) {
     }
 }
 
+// Valida os dados do cadastro e cria a conta no Supabase Auth.
 async function fazerCadastro(event) {
     event.preventDefault();
     limparMensagem();
@@ -199,6 +213,7 @@ async function fazerCadastro(event) {
     }
 }
 
+// Traduz algumas mensagens comuns do Supabase Auth para mensagens em português.
 function traduzirErroAuth(error) {
     const mensagem = (error?.message || "").toLowerCase();
 
@@ -211,6 +226,7 @@ function traduzirErroAuth(error) {
     return error?.message || "Não foi possível concluir a operação.";
 }
 
+// Liga os eventos dos controles da tela às funções correspondentes.
 abaLogin?.addEventListener("click", () => trocarModo("login"));
 abaCadastro?.addEventListener("click", () => trocarModo("cadastro"));
 linkParaCadastro?.addEventListener("click", () => trocarModo("cadastro"));
@@ -218,6 +234,7 @@ linkParaLogin?.addEventListener("click", () => trocarModo("login"));
 formLogin?.addEventListener("submit", fazerLogin);
 formCadastro?.addEventListener("submit", fazerCadastro);
 
+// Inicializa os comportamentos necessários quando a página é carregada.
 configurarToggleSenha();
 registrarServiceWorker();
 verificarSessaoExistente();
