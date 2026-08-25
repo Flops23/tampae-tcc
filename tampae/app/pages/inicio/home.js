@@ -125,7 +125,7 @@ async function loadChart(user) {
 
     const { data: collections, error } = await supabase
         .from("collections")
-        .select("criado_em,tampinhas,peso_gramas")
+        .select("criado_em,pontos")
         .eq("user_id", user.id)
         .order("criado_em", { ascending: true });
     if (error) throw error;
@@ -139,7 +139,7 @@ async function loadChart(user) {
     canvas.hidden = false;
     empty.hidden = true;
 
-    // Desenha um gráfico simples usando Canvas, sem depender de biblioteca externa.
+    // Desenha a evolução dos pontos de cada coleta usando Canvas, sem biblioteca externa.
     const context = canvas.getContext("2d");
     if (!context) return;
 
@@ -152,7 +152,7 @@ async function loadChart(user) {
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.clearRect(0, 0, width, height);
 
-    const values = collections.map((collection) => Number(collection.tampinhas) || 0);
+    const values = collections.map((collection) => Number(collection.pontos) || 0);
     const maxValue = Math.max(...values, 1);
     const padding = { top: 20, right: 16, bottom: 30, left: 36 };
     const chartWidth = width - padding.left - padding.right;
