@@ -108,7 +108,7 @@ function setupEmptyChart() {
     empty.hidden = false;
 }
 
-// Agrupa as coletas pelo dia local do usuário, somando os pontos e contando as coletas.
+// Agrupa as coletas por dia e calcula a pontuação acumulada até cada dia.
 function groupCollectionsByDay(collections) {
     const groups = new Map();
 
@@ -125,16 +125,21 @@ function groupCollectionsByDay(collections) {
         groups.set(key, current);
     });
 
-    return [...groups.entries()].map(([key, value]) => ({
-        key,
-        pontos: value.pontos,
-        quantidade: value.quantidade,
-        data: new Intl.DateTimeFormat("pt-BR", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric"
-        }).format(new Date(`${key}T12:00:00`))
-    }));
+    let acumulado = 0;
+    return [...groups.entries()].map(([key, value]) => {
+        acumulado += value.pontos;
+        return {
+            key,
+            pontos: acumulado,
+            pontosDoDia: value.pontos,
+            quantidade: value.quantidade,
+            data: new Intl.DateTimeFormat("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric"
+            }).format(new Date(`${key}T12:00:00`))
+        };
+    });
 }
 
 function drawChart() {
@@ -222,7 +227,7 @@ function showChartTooltip(index, clientX, clientY) {
     const tooltip = $("graficoTooltip");
     if (!tooltip || index < 0 || index >= chartState.points.length) return;
     tooltip.hidden = false;
-    tooltip.innerHTML = `<strong>${chartState.dates[index]}</strong><span>${formatNumber(chartState.points[index])} pontos</span><small>${chartState.counts[index]} ${chartState.counts[index] === 1 ? "coleta" : "coletas"}</small>`;
+    tooltip.innerHTML = `<strong>${chartState.dates[index]}</strong><span>${formatNumber(chartState.points[index])} pontos acumulados</span><small>+${formatNumber(chartState.dayPoints[index])} no dia · ${chartState.counts[index]} ${chartState.counts[index] === 1 ? "coleta" : "coletas"}</small>`;
     const box = $("graficoBox").getBoundingClientRect();
     tooltip.style.left = `${Math.max(8, Math.min(clientX - box.left, box.width - tooltip.offsetWidth - 8))}px`;
     tooltip.style.top = `${Math.max(8, clientY - box.top - tooltip.offsetHeight - 12)}px`;
@@ -268,7 +273,7 @@ async function loadChart(user) {
         .order("criado_em", { ascending: true });
     if (error) throw error;
 
-    // A partir de 3 coletas totais, o gráfico é liberado e os dados são agrupados por dia.
+    // O gráfico é liberado após 3 coletas e mostra a evolução acumulada por dia.
     if ((collections ?? []).length < 3) {
         setupEmptyChart();
         return;
@@ -280,6 +285,7 @@ async function loadChart(user) {
     chartState.points = daily.map((day) => day.pontos);
     chartState.dates = daily.map((day) => day.data);
     chartState.counts = daily.map((day) => day.quantidade);
+    chartState.dayPoints = daily.map((day) => day.pontosDoDia);
     bindChartInteraction();
     requestAnimationFrame(drawChart);
     window.addEventListener("resize", drawChart);
