@@ -5,13 +5,12 @@ import { requireAuth } from "../../js/auth.js";
 // Atalho para buscar elementos pelo id.
 const $ = (id) => document.getElementById(id);
 const AVATAR_BUCKET = "avatars";
+let chartState = { points: [], dates: [] };
 
-// Formata números conforme o padrão brasileiro.
 function formatNumber(value) {
     return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
 }
 
-// Exibe pesos em gramas ou quilogramas conforme o valor.
 function formatWeight(grams) {
     const value = Number(grams) || 0;
     return value >= 1000
@@ -19,7 +18,6 @@ function formatWeight(grams) {
         : `${value.toLocaleString("pt-BR")} g`;
 }
 
-// Busca no banco os dados básicos do perfil e atualiza os indicadores da Home.
 async function loadProfile(user) {
     const { data: profile, error } = await supabase
         .from("profiles")
@@ -34,7 +32,6 @@ async function loadProfile(user) {
     $("statTampinhas").textContent = formatNumber(profile.tampinhas_totais);
     $("statPeso").textContent = formatWeight(profile.peso_total_gramas);
 
-    // Se existir foto, transforma o caminho do Storage em uma URL pública.
     if (profile.foto_path) {
         const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(profile.foto_path);
         const link = document.querySelector(".profile");
@@ -47,7 +44,6 @@ async function loadProfile(user) {
     }
 }
 
-// Carrega o evento disponível e calcula a posição do usuário no ranking.
 async function loadEventAndRanking(user) {
     const { data: events, error } = await supabase
         .from("events")
@@ -68,7 +64,6 @@ async function loadEventAndRanking(user) {
     $("eventoNome").textContent = event.nome;
     $("eventoData").textContent = `${formatDate(event.data_inicio)} — ${formatDate(event.data_fim)}`;
 
-    // A view de ranking já fornece a pontuação agregada por usuário no evento.
     const { data: ranking, error: rankError } = await supabase
         .from("vw_ranking_eventos")
         .select("user_id,pontos_total")
@@ -80,7 +75,6 @@ async function loadEventAndRanking(user) {
     $("statPosicao").textContent = position >= 0 ? `${position + 1}º` : "—";
 }
 
-// Busca uma conquista para mostrar o progresso na Home.
 async function loadAchievement(user) {
     const { data, error } = await supabase
         .from("vw_conquistas_usuario")
@@ -100,7 +94,6 @@ async function loadAchievement(user) {
         return;
     }
 
-    // Converte o progresso atual da conquista em porcentagem para a barra visual.
     const progress = Math.min(100, Number(achievement.meta_valor) ? Number(achievement.progresso_atual || 0) / Number(achievement.meta_valor) * 100 : 0);
     $("conquistaNome").textContent = achievement.nome;
     $("conquistaDescricao").textContent = achievement.descricao || `${achievement.progresso_atual || 0} de ${achievement.meta_valor}`;
@@ -108,7 +101,6 @@ async function loadAchievement(user) {
     $("conquistaBarra").style.width = `${progress}%`;
 }
 
-// Mostra o estado vazio do gráfico quando o usuário ainda não possui 3 coletas.
 function setupEmptyChart() {
     const canvas = $("grafico");
     const empty = $("graficoVazio");
@@ -117,7 +109,130 @@ function setupEmptyChart() {
     empty.hidden = false;
 }
 
-// Carrega as coletas do usuário e libera o gráfico somente a partir da terceira coleta.
+// Desenha o gráfico com área preenchida, pontos destacados e interação por toque/mouse.
+function drawChart() {
+    const canvas = $("grafico");
+    if (!canvas || canvas.hidden || !chartState.points.length) return;
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(300, Math.round(rect.width || 300));
+    const height = Math.max(180, Math.round(rect.height || 180));
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    const values = chartState.points;
+    const maxValue = Math.max(...values, 1);
+    const padding = { top: 20, right: 20, bottom: 34, left: 42 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    const stepX = values.length > 1 ? chartWidth / (values.length - 1) : chartWidth;
+    const points = values.map((value, index) => ({
+        x: padding.left + stepX * index,
+        y: height - padding.bottom - (value / maxValue) * chartHeight,
+        value,
+        index
+    }));
+
+    context.strokeStyle = "#edf1ed";
+    context.lineWidth = 1;
+    context.font = "11px sans-serif";
+    context.fillStyle = "#7a817d";
+    context.textAlign = "right";
+    for (let i = 0; i <= 3; i++) {
+        const y = padding.top + (chartHeight / 3) * i;
+        const label = Math.round(maxValue - (maxValue / 3) * i);
+        context.beginPath();
+        context.moveTo(padding.left, y);
+        context.lineTo(width - padding.right, y);
+        context.stroke();
+        context.fillText(String(label), padding.left - 8, y + 4);
+    }
+
+    // Área sob a linha para dar profundidade visual ao gráfico.
+    const gradient = context.createLinearGradient(0, padding.top, 0, height - padding.bottom);
+    gradient.addColorStop(0, "rgba(34,197,94,.28)");
+    gradient.addColorStop(1, "rgba(34,197,94,0)");
+    context.beginPath();
+    context.moveTo(points[0].x, height - padding.bottom);
+    points.forEach((point) => context.lineTo(point.x, point.y));
+    context.lineTo(points[points.length - 1].x, height - padding.bottom);
+    context.closePath();
+    context.fillStyle = gradient;
+    context.fill();
+
+    context.strokeStyle = "#16a34a";
+    context.lineWidth = 3;
+    context.lineJoin = "round";
+    context.lineCap = "round";
+    context.beginPath();
+    points.forEach((point, index) => index === 0 ? context.moveTo(point.x, point.y) : context.lineTo(point.x, point.y));
+    context.stroke();
+
+    context.fillStyle = "#fff";
+    context.strokeStyle = "#16a34a";
+    context.lineWidth = 3;
+    points.forEach((point) => {
+        context.beginPath();
+        context.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        context.fill();
+        context.stroke();
+    });
+
+    context.fillStyle = "#7a817d";
+    context.font = "11px sans-serif";
+    context.textAlign = "center";
+    points.forEach((point) => context.fillText(String(point.index + 1), point.x, height - 11));
+}
+
+// Exibe os detalhes da coleta mais próxima do toque ou mouse.
+function showChartTooltip(index, clientX, clientY) {
+    const tooltip = $("graficoTooltip");
+    if (!tooltip || index < 0 || index >= chartState.points.length) return;
+    tooltip.hidden = false;
+    tooltip.innerHTML = `<strong>Coleta ${index + 1}</strong><span>${formatNumber(chartState.points[index])} pontos</span><small>${chartState.dates[index]}</small>`;
+    const box = $("graficoBox").getBoundingClientRect();
+    tooltip.style.left = `${Math.max(8, Math.min(clientX - box.left, box.width - tooltip.offsetWidth - 8))}px`;
+    tooltip.style.top = `${Math.max(8, clientY - box.top - tooltip.offsetHeight - 12)}px`;
+}
+
+function hideChartTooltip() {
+    const tooltip = $("graficoTooltip");
+    if (tooltip) tooltip.hidden = true;
+}
+
+function bindChartInteraction() {
+    const canvas = $("grafico");
+    if (!canvas || canvas.dataset.interactive === "true") return;
+    canvas.dataset.interactive = "true";
+
+    const locatePoint = (event) => {
+        if (!chartState.points.length) return -1;
+        const rect = canvas.getBoundingClientRect();
+        const x = (event.clientX ?? event.touches?.[0]?.clientX ?? 0) - rect.left;
+        const width = rect.width;
+        const paddingLeft = 42;
+        const paddingRight = 20;
+        const chartWidth = width - paddingLeft - paddingRight;
+        const stepX = chartState.points.length > 1 ? chartWidth / (chartState.points.length - 1) : chartWidth;
+        let index = Math.round((x - paddingLeft) / stepX);
+        index = Math.max(0, Math.min(chartState.points.length - 1, index));
+        return index;
+    };
+
+    canvas.addEventListener("pointermove", (event) => {
+        showChartTooltip(locatePoint(event), event.clientX, event.clientY);
+    });
+    canvas.addEventListener("pointerleave", hideChartTooltip);
+    canvas.addEventListener("pointerdown", (event) => {
+        showChartTooltip(locatePoint(event), event.clientX, event.clientY);
+    });
+}
+
 async function loadChart(user) {
     const canvas = $("grafico");
     const empty = $("graficoVazio");
@@ -130,7 +245,6 @@ async function loadChart(user) {
         .order("criado_em", { ascending: true });
     if (error) throw error;
 
-    // O gráfico só é exibido depois de 3 coletas registradas.
     if ((collections ?? []).length < 3) {
         setupEmptyChart();
         return;
@@ -138,76 +252,21 @@ async function loadChart(user) {
 
     canvas.hidden = false;
     empty.hidden = true;
-
-    // Desenha a evolução dos pontos de cada coleta usando Canvas, sem biblioteca externa.
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const width = Math.max(300, Math.round(rect.width || canvas.clientWidth || 300));
-    const height = Math.max(180, Math.round(rect.height || canvas.clientHeight || 180));
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, width, height);
-
-    const values = collections.map((collection) => Number(collection.pontos) || 0);
-    const maxValue = Math.max(...values, 1);
-    const padding = { top: 20, right: 16, bottom: 30, left: 36 };
-    const chartWidth = width - padding.left - padding.right;
-    const chartHeight = height - padding.top - padding.bottom;
-    const stepX = values.length > 1 ? chartWidth / (values.length - 1) : chartWidth;
-
-    context.strokeStyle = "#d9dee7";
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(padding.left, padding.top);
-    context.lineTo(padding.left, height - padding.bottom);
-    context.lineTo(width - padding.right, height - padding.bottom);
-    context.stroke();
-
-    context.strokeStyle = "#2f6fed";
-    context.lineWidth = 3;
-    context.beginPath();
-
-    values.forEach((value, index) => {
-        const x = padding.left + stepX * index;
-        const y = height - padding.bottom - (value / maxValue) * chartHeight;
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-    });
-    context.stroke();
-
-    context.fillStyle = "#2f6fed";
-    values.forEach((value, index) => {
-        const x = padding.left + stepX * index;
-        const y = height - padding.bottom - (value / maxValue) * chartHeight;
-        context.beginPath();
-        context.arc(x, y, 4, 0, Math.PI * 2);
-        context.fill();
-    });
-
-    context.fillStyle = "#555";
-    context.font = "12px sans-serif";
-    context.textAlign = "center";
-    values.forEach((value, index) => {
-        const x = padding.left + stepX * index;
-        context.fillText(String(index + 1), x, height - 10);
-    });
+    chartState.points = collections.map((collection) => Number(collection.pontos) || 0);
+    chartState.dates = collections.map((collection) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(collection.criado_em)));
+    bindChartInteraction();
+    requestAnimationFrame(drawChart);
+    window.addEventListener("resize", drawChart);
 }
 
-// Formata uma data para dia/mês no padrão brasileiro.
 function formatDate(value) {
     return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(new Date(value));
 }
 
-// Escapa caracteres HTML antes de inserir valores em trechos de HTML.
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char]));
 }
 
-// Inicializa a Home somente depois de confirmar a autenticação do usuário.
 async function initHome() {
     const user = await requireAuth();
     if (!user) return;
