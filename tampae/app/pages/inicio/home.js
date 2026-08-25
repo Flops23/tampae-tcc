@@ -108,13 +108,93 @@ async function loadAchievement(user) {
     $("conquistaBarra").style.width = `${progress}%`;
 }
 
-// Mostra o estado vazio do gráfico quando não há dados para desenhá-lo.
+// Mostra o estado vazio do gráfico quando o usuário ainda não possui 3 coletas.
 function setupEmptyChart() {
     const canvas = $("grafico");
     const empty = $("graficoVazio");
     if (!canvas || !empty) return;
     canvas.hidden = true;
     empty.hidden = false;
+}
+
+// Carrega as coletas do usuário e libera o gráfico somente a partir da terceira coleta.
+async function loadChart(user) {
+    const canvas = $("grafico");
+    const empty = $("graficoVazio");
+    if (!canvas || !empty) return;
+
+    const { data: collections, error } = await supabase
+        .from("collections")
+        .select("criado_em,tampinhas,peso_gramas")
+        .eq("user_id", user.id)
+        .order("criado_em", { ascending: true });
+    if (error) throw error;
+
+    // O gráfico só é exibido depois de 3 coletas registradas.
+    if ((collections ?? []).length < 3) {
+        setupEmptyChart();
+        return;
+    }
+
+    canvas.hidden = false;
+    empty.hidden = true;
+
+    // Desenha um gráfico simples usando Canvas, sem depender de biblioteca externa.
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const width = Math.max(300, Math.round(rect.width || canvas.clientWidth || 300));
+    const height = Math.max(180, Math.round(rect.height || canvas.clientHeight || 180));
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, width, height);
+
+    const values = collections.map((collection) => Number(collection.tampinhas) || 0);
+    const maxValue = Math.max(...values, 1);
+    const padding = { top: 20, right: 16, bottom: 30, left: 36 };
+    const chartWidth = width - padding.left - padding.right;
+    const chartHeight = height - padding.top - padding.bottom;
+    const stepX = values.length > 1 ? chartWidth / (values.length - 1) : chartWidth;
+
+    context.strokeStyle = "#d9dee7";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(padding.left, padding.top);
+    context.lineTo(padding.left, height - padding.bottom);
+    context.lineTo(width - padding.right, height - padding.bottom);
+    context.stroke();
+
+    context.strokeStyle = "#2f6fed";
+    context.lineWidth = 3;
+    context.beginPath();
+
+    values.forEach((value, index) => {
+        const x = padding.left + stepX * index;
+        const y = height - padding.bottom - (value / maxValue) * chartHeight;
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+    });
+    context.stroke();
+
+    context.fillStyle = "#2f6fed";
+    values.forEach((value, index) => {
+        const x = padding.left + stepX * index;
+        const y = height - padding.bottom - (value / maxValue) * chartHeight;
+        context.beginPath();
+        context.arc(x, y, 4, 0, Math.PI * 2);
+        context.fill();
+    });
+
+    context.fillStyle = "#555";
+    context.font = "12px sans-serif";
+    context.textAlign = "center";
+    values.forEach((value, index) => {
+        const x = padding.left + stepX * index;
+        context.fillText(String(index + 1), x, height - 10);
+    });
 }
 
 // Formata uma data para dia/mês no padrão brasileiro.
@@ -134,7 +214,7 @@ async function initHome() {
     try {
         await loadProfile(user);
         await Promise.all([loadEventAndRanking(user), loadAchievement(user)]);
-        setupEmptyChart();
+        await loadChart(user);
     } catch (error) {
         console.error("Falha ao carregar a Home:", error);
     }
