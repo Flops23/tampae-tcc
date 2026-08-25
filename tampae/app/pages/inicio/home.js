@@ -4,7 +4,8 @@ import { requireAuth } from "../../js/auth.js";
 
 const $ = (id) => document.getElementById(id);
 const AVATAR_BUCKET = "avatars";
-let chartState = { points: [], dates: [], counts: [] };
+let chartState = { points: [], dates: [], counts: [], dayPoints: [] };
+let tooltipTimer = null;
 
 function formatNumber(value) {
     return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
@@ -217,18 +218,28 @@ function drawChart() {
     context.fillStyle = "#7a817d";
     context.font = "11px sans-serif";
     context.textAlign = "center";
-    points.forEach((point) => {
-        const date = chartState.dates[point.index];
-        context.fillText(date.slice(0, 5), point.x, height - 12);
-    });
+    points.forEach((point) => context.fillText(chartState.dates[point.index].slice(0, 5), point.x, height - 12));
 }
 
-function showChartTooltip(index, clientX, clientY) {
+function showChartTooltip(index, clientX, clientY, isTouch = false) {
     const tooltip = $("graficoTooltip");
-    if (!tooltip || index < 0 || index >= chartState.points.length) return;
+    const boxElement = $("graficoBox");
+    if (!tooltip || !boxElement || index < 0 || index >= chartState.points.length) return;
+
     tooltip.hidden = false;
     tooltip.innerHTML = `<strong>${chartState.dates[index]}</strong><span>${formatNumber(chartState.points[index])} pontos acumulados</span><small>+${formatNumber(chartState.dayPoints[index])} no dia · ${chartState.counts[index]} ${chartState.counts[index] === 1 ? "coleta" : "coletas"}</small>`;
-    const box = $("graficoBox").getBoundingClientRect();
+
+    const box = boxElement.getBoundingClientRect();
+
+    if (isTouch) {
+        // No celular o tooltip fica preso no topo do card, longe do dedo.
+        tooltip.style.left = "50%";
+        tooltip.style.top = "8px";
+        tooltip.style.transform = "translateX(-50%)";
+        return;
+    }
+
+    tooltip.style.transform = "translateX(-50%)";
     tooltip.style.left = `${Math.max(8, Math.min(clientX - box.left, box.width - tooltip.offsetWidth - 8))}px`;
     tooltip.style.top = `${Math.max(8, clientY - box.top - tooltip.offsetHeight - 12)}px`;
 }
@@ -236,6 +247,11 @@ function showChartTooltip(index, clientX, clientY) {
 function hideChartTooltip() {
     const tooltip = $("graficoTooltip");
     if (tooltip) tooltip.hidden = true;
+}
+
+function scheduleTouchTooltipHide() {
+    clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(hideChartTooltip, 3500);
 }
 
 function bindChartInteraction() {
@@ -246,19 +262,35 @@ function bindChartInteraction() {
     const locatePoint = (event) => {
         if (!chartState.points.length) return -1;
         const rect = canvas.getBoundingClientRect();
-        const x = (event.clientX ?? event.touches?.[0]?.clientX ?? 0) - rect.left;
+        const x = (event.clientX ?? 0) - rect.left;
         const paddingLeft = 42;
         const paddingRight = 20;
-        const chartWidth = rect.width - paddingLeft - paddingRight;
+        const chartWidth = Math.max(1, rect.width - paddingLeft - paddingRight);
         const stepX = chartState.points.length > 1 ? chartWidth / (chartState.points.length - 1) : chartWidth;
         let index = Math.round((x - paddingLeft) / stepX);
         index = Math.max(0, Math.min(chartState.points.length - 1, index));
         return index;
     };
 
-    canvas.addEventListener("pointermove", (event) => showChartTooltip(locatePoint(event), event.clientX, event.clientY));
-    canvas.addEventListener("pointerleave", hideChartTooltip);
-    canvas.addEventListener("pointerdown", (event) => showChartTooltip(locatePoint(event), event.clientX, event.clientY));
+    canvas.addEventListener("pointermove", (event) => {
+        const index = locatePoint(event);
+        showChartTooltip(index, event.clientX, event.clientY, event.pointerType === "touch");
+        if (event.pointerType === "touch") scheduleTouchTooltipHide();
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+        const index = locatePoint(event);
+        showChartTooltip(index, event.clientX, event.clientY, event.pointerType === "touch");
+        if (event.pointerType === "touch") scheduleTouchTooltipHide();
+    });
+
+    canvas.addEventListener("pointerup", (event) => {
+        if (event.pointerType === "touch") scheduleTouchTooltipHide();
+    });
+
+    canvas.addEventListener("pointerleave", (event) => {
+        if (event.pointerType !== "touch") hideChartTooltip();
+    });
 }
 
 async function loadChart(user) {
