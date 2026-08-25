@@ -11,8 +11,79 @@
 <link rel="stylesheet" href="../../css/layout.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="index.css">
+<style>
+/* Tela exibida enquanto o Supabase verifica a sessão existente. */
+#carregamentoInicial{
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:16px;
+    background:linear-gradient(145deg,#0f5c30,#16a34a);
+    color:white;
+    transition:opacity .2s ease, visibility .2s ease;
+}
+
+#carregamentoInicial.oculto{
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+}
+
+#carregamentoInicial .logo-carregamento{
+    width:72px;
+    height:72px;
+    border-radius:22px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.25);
+}
+
+#carregamentoInicial .logo-carregamento span{
+    font-size:40px;
+}
+
+#carregamentoInicial .titulo-carregamento{
+    font-size:24px;
+    font-weight:800;
+    letter-spacing:.2px;
+}
+
+#carregamentoInicial .texto-carregamento{
+    font-size:14px;
+    opacity:.9;
+}
+
+#carregamentoInicial .spinner-carregamento{
+    width:28px;
+    height:28px;
+    margin-top:4px;
+    border:3px solid rgba(255,255,255,.28);
+    border-top-color:white;
+    border-radius:50%;
+    animation:carregamentoGirar .8s linear infinite;
+}
+
+@keyframes carregamentoGirar{
+    to{ transform:rotate(360deg); }
+}
+</style>
 </head>
 <body>
+<div id="carregamentoInicial" aria-live="polite" aria-label="Carregando TampAê">
+    <div class="logo-carregamento">
+        <span class="material-symbols-rounded">recycling</span>
+    </div>
+    <div class="titulo-carregamento">TampAÊ</div>
+    <div class="texto-carregamento">Verificando sua sessão...</div>
+    <div class="spinner-carregamento" aria-hidden="true"></div>
+</div>
+
 <div class="tela">
     <div class="hero">
         <div class="logo-circulo"><span class="material-symbols-rounded">recycling</span></div>
