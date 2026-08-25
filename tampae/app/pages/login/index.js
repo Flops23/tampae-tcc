@@ -9,6 +9,12 @@ const abaCadastro = document.getElementById("abaCadastro");
 const linkParaCadastro = document.getElementById("linkParaCadastro");
 const linkParaLogin = document.getElementById("linkParaLogin");
 
+// Remove a tela inicial depois que a verificação de autenticação terminou.
+function esconderCarregamentoInicial() {
+    const carregamento = document.getElementById("carregamentoInicial");
+    carregamento?.classList.add("oculto");
+}
+
 // Mostra uma mensagem de erro ou sucesso na interface.
 function mostrarMensagem(mensagem, tipo = "erro") {
     const elemento = document.getElementById("mensagem");
@@ -110,11 +116,21 @@ function getRedirectPath() {
 // Verifica se já existe uma sessão autenticada antes de mostrar novamente o login.
 async function verificarSessaoExistente() {
     const { data, error } = await supabase.auth.getSession();
+
     if (error) {
         console.error("Erro ao verificar sessão:", error);
+        esconderCarregamentoInicial();
         return;
     }
-    if (data.session) window.location.replace(getRedirectPath());
+
+    if (data.session) {
+        // Mantém a tela de carregamento visível enquanto o redirecionamento acontece.
+        window.location.replace(getRedirectPath());
+        return;
+    }
+
+    // Só libera o login depois que o Supabase confirmou que não há sessão.
+    esconderCarregamentoInicial();
 }
 
 // Valida os dados do formulário e autentica o usuário pelo Supabase Auth.
