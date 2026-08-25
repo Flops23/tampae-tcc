@@ -2,10 +2,9 @@
 import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
-// Atalho para buscar elementos pelo id.
 const $ = (id) => document.getElementById(id);
 const AVATAR_BUCKET = "avatars";
-let chartState = { points: [], dates: [] };
+let chartState = { points: [], dates: [], counts: [] };
 
 function formatNumber(value) {
     return new Intl.NumberFormat("pt-BR").format(Number(value) || 0);
@@ -109,7 +108,35 @@ function setupEmptyChart() {
     empty.hidden = false;
 }
 
-// Desenha o gráfico com área preenchida, pontos destacados e interação por toque/mouse.
+// Agrupa as coletas pelo dia local do usuário, somando os pontos e contando as coletas.
+function groupCollectionsByDay(collections) {
+    const groups = new Map();
+
+    collections.forEach((collection) => {
+        const date = new Date(collection.criado_em);
+        const key = new Intl.DateTimeFormat("en-CA", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(date);
+        const current = groups.get(key) || { pontos: 0, quantidade: 0 };
+        current.pontos += Number(collection.pontos) || 0;
+        current.quantidade += 1;
+        groups.set(key, current);
+    });
+
+    return [...groups.entries()].map(([key, value]) => ({
+        key,
+        pontos: value.pontos,
+        quantidade: value.quantidade,
+        data: new Intl.DateTimeFormat("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric"
+        }).format(new Date(`${key}T12:00:00`))
+    }));
+}
+
 function drawChart() {
     const canvas = $("grafico");
     if (!canvas || canvas.hidden || !chartState.points.length) return;
@@ -127,7 +154,7 @@ function drawChart() {
 
     const values = chartState.points;
     const maxValue = Math.max(...values, 1);
-    const padding = { top: 20, right: 20, bottom: 34, left: 42 };
+    const padding = { top: 20, right: 20, bottom: 38, left: 42 };
     const chartWidth = width - padding.left - padding.right;
     const chartHeight = height - padding.top - padding.bottom;
     const stepX = values.length > 1 ? chartWidth / (values.length - 1) : chartWidth;
@@ -153,7 +180,6 @@ function drawChart() {
         context.fillText(String(label), padding.left - 8, y + 4);
     }
 
-    // Área sob a linha para dar profundidade visual ao gráfico.
     const gradient = context.createLinearGradient(0, padding.top, 0, height - padding.bottom);
     gradient.addColorStop(0, "rgba(34,197,94,.28)");
     gradient.addColorStop(1, "rgba(34,197,94,0)");
@@ -186,15 +212,17 @@ function drawChart() {
     context.fillStyle = "#7a817d";
     context.font = "11px sans-serif";
     context.textAlign = "center";
-    points.forEach((point) => context.fillText(String(point.index + 1), point.x, height - 11));
+    points.forEach((point) => {
+        const date = chartState.dates[point.index];
+        context.fillText(date.slice(0, 5), point.x, height - 12);
+    });
 }
 
-// Exibe os detalhes da coleta mais próxima do toque ou mouse.
 function showChartTooltip(index, clientX, clientY) {
     const tooltip = $("graficoTooltip");
     if (!tooltip || index < 0 || index >= chartState.points.length) return;
     tooltip.hidden = false;
-    tooltip.innerHTML = `<strong>Coleta ${index + 1}</strong><span>${formatNumber(chartState.points[index])} pontos</span><small>${chartState.dates[index]}</small>`;
+    tooltip.innerHTML = `<strong>${chartState.dates[index]}</strong><span>${formatNumber(chartState.points[index])} pontos</span><small>${chartState.counts[index]} ${chartState.counts[index] === 1 ? "coleta" : "coletas"}</small>`;
     const box = $("graficoBox").getBoundingClientRect();
     tooltip.style.left = `${Math.max(8, Math.min(clientX - box.left, box.width - tooltip.offsetWidth - 8))}px`;
     tooltip.style.top = `${Math.max(8, clientY - box.top - tooltip.offsetHeight - 12)}px`;
@@ -214,23 +242,18 @@ function bindChartInteraction() {
         if (!chartState.points.length) return -1;
         const rect = canvas.getBoundingClientRect();
         const x = (event.clientX ?? event.touches?.[0]?.clientX ?? 0) - rect.left;
-        const width = rect.width;
         const paddingLeft = 42;
         const paddingRight = 20;
-        const chartWidth = width - paddingLeft - paddingRight;
+        const chartWidth = rect.width - paddingLeft - paddingRight;
         const stepX = chartState.points.length > 1 ? chartWidth / (chartState.points.length - 1) : chartWidth;
         let index = Math.round((x - paddingLeft) / stepX);
         index = Math.max(0, Math.min(chartState.points.length - 1, index));
         return index;
     };
 
-    canvas.addEventListener("pointermove", (event) => {
-        showChartTooltip(locatePoint(event), event.clientX, event.clientY);
-    });
+    canvas.addEventListener("pointermove", (event) => showChartTooltip(locatePoint(event), event.clientX, event.clientY));
     canvas.addEventListener("pointerleave", hideChartTooltip);
-    canvas.addEventListener("pointerdown", (event) => {
-        showChartTooltip(locatePoint(event), event.clientX, event.clientY);
-    });
+    canvas.addEventListener("pointerdown", (event) => showChartTooltip(locatePoint(event), event.clientX, event.clientY));
 }
 
 async function loadChart(user) {
@@ -245,15 +268,18 @@ async function loadChart(user) {
         .order("criado_em", { ascending: true });
     if (error) throw error;
 
+    // A partir de 3 coletas totais, o gráfico é liberado e os dados são agrupados por dia.
     if ((collections ?? []).length < 3) {
         setupEmptyChart();
         return;
     }
 
+    const daily = groupCollectionsByDay(collections ?? []);
     canvas.hidden = false;
     empty.hidden = true;
-    chartState.points = collections.map((collection) => Number(collection.pontos) || 0);
-    chartState.dates = collections.map((collection) => new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(collection.criado_em)));
+    chartState.points = daily.map((day) => day.pontos);
+    chartState.dates = daily.map((day) => day.data);
+    chartState.counts = daily.map((day) => day.quantidade);
     bindChartInteraction();
     requestAnimationFrame(drawChart);
     window.addEventListener("resize", drawChart);
