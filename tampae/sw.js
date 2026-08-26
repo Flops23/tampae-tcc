@@ -1,4 +1,4 @@
-const CACHE_NAME = "tampae-app-v6";
+const CACHE_NAME = "tampae-app-v7";
 
 const APP_SHELL = [
   "./app/pages/login/index.html",
