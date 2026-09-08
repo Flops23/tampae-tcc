@@ -84,6 +84,8 @@ void connectWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("Wi-Fi conectado.");
+    Serial.print("MAC Address: ");
+    Serial.println(WiFi.macAddress());
     Serial.print("IP do ESP32: http://");
     Serial.println(WiFi.localIP());
   } else {
