@@ -1,9 +1,9 @@
 // Configurações centrais utilizadas pelo aplicativo TAMPAÊ.
 export const CONFIG = {
     // URL do projeto Supabase utilizado pelo aplicativo.
-    SUPABASE_URL: "https://jtmbsyharkxrpnkunbuj.supabase.co",
+    SUPABASE_URL: "https://usztjfxtbagjbnupiuxm.supabase.co",
     // Chave pública utilizada pelo cliente para acessar o Supabase.
-    SUPABASE_ANON_KEY: "sb_publishable_TeblGQP9D6s24o0IUiZbAg_CKxmxgPo",
+    SUPABASE_ANON_KEY: "sb_publishable_SZhZ1FlWxXzd85fWRQ69Fg_j9HXqqnr",
 
     // Nome exibido/identificado como nome do aplicativo.
     APP_NAME: "TampAÊ",
