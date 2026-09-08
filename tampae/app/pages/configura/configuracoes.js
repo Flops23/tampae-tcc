@@ -14,13 +14,26 @@ function loadSettings() {
     $("toggleAvisos").checked = saved.avisos !== false;
 }
 
-// Salva as preferências atuais no localStorage do navegador.
+// Salva as preferências atuais no localStorage.
 function saveSettings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify({
         som: $("toggleSom").checked,
         vibracao: $("toggleVibracao").checked,
         avisos: $("toggleAvisos").checked
     }));
+}
+
+// Mostra o acesso administrativo apenas para uma conta marcada como administradora.
+async function loadAdminAccess(user) {
+    const { data, error } = await supabase
+        .from("profiles")
+        .select("is_admin")
+        .eq("id", user.id)
+        .maybeSingle();
+
+    if (!error && data?.is_admin === true) {
+        $("secaoAdmin").hidden = false;
+    }
 }
 
 // Valida e envia uma nova senha para o Supabase Auth.
@@ -50,6 +63,7 @@ async function init() {
     if (!user) return;
 
     loadSettings();
+    await loadAdminAccess(user);
     ["toggleSom", "toggleVibracao", "toggleAvisos"].forEach((id) => $(id)?.addEventListener("change", saveSettings));
 
     // O logout usa a função compartilhada de autenticação.
