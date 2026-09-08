@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#15803d">
+<title>Painel administrativo · TampAê</title>
+<link rel="stylesheet" href="../../css/layout.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<header class="top-bar">
+  <a href="../inicio/home.html" class="back-btn" aria-label="Voltar"><span class="material-symbols-rounded">arrow_back</span></a>
+  <div class="app-name">Administração</div>
+</header>
+
+<main class="admin-page" id="adminPage" hidden>
+  <section class="hero">
+    <div>
+      <span class="eyebrow">TAMPAÊ</span>
+      <h1>Painel administrativo</h1>
+      <p>Gerencie campanhas, eventos, máquinas e conquistas em um só lugar.</p>
+    </div>
+    <button class="btn ghost" id="btnAtualizar" type="button"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
+  </section>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="visao" type="button">Visão geral</button>
+    <button class="tab" data-tab="campanhas" type="button">Campanhas</button>
+    <button class="tab" data-tab="eventos" type="button">Eventos</button>
+    <button class="tab" data-tab="maquinas" type="button">Máquinas</button>
+    <button class="tab" data-tab="conquistas" type="button">Conquistas</button>
+  </div>
+
+  <section class="panel tab-panel" data-panel="visao">
+    <div class="panel-head"><div><h2>Dados gerais por campanha</h2><p>Resumo das coletas registradas nos eventos de cada campanha.</p></div></div>
+    <div id="statsGrid" class="stats-grid"></div>
+    <div id="statsEmpty" class="empty" hidden>Nenhuma campanha cadastrada.</div>
+  </section>
+
+  <section class="panel tab-panel" data-panel="campanhas" hidden>
+    <div class="panel-head"><div><h2>Campanhas</h2><p>Crie e acompanhe iniciativas de reciclagem.</p></div></div>
+    <form id="campanhaForm" class="form-grid">
+      <input type="hidden" id="campanhaId">
+      <label>Nome<input id="campanhaNome" required maxlength="120" placeholder="Ex.: Semana da Reciclagem"></label>
+      <label>Descrição<input id="campanhaDescricao" maxlength="240" placeholder="Objetivo da campanha"></label>
+      <label>Início<input id="campanhaInicio" type="datetime-local" required></label>
+      <label>Fim<input id="campanhaFim" type="datetime-local"></label>
+      <label class="check"><input id="campanhaAtivo" type="checkbox" checked> Campanha ativa</label>
+      <div class="form-actions"><button class="btn ghost" id="cancelarCampanha" type="button">Cancelar</button><button class="btn primary" type="submit">Salvar campanha</button></div>
+    </form>
+    <div id="campanhasList" class="list"></div>
+  </section>
+
+  <section class="panel tab-panel" data-panel="eventos" hidden>
+    <div class="panel-head"><div><h2>Eventos</h2><p>Defina períodos de participação e associe cada evento a uma campanha.</p></div></div>
+    <form id="eventoForm" class="form-grid">
+      <input type="hidden" id="eventoId">
+      <label>Nome<input id="eventoNome" required maxlength="120" placeholder="Ex.: Coleta ETEC - Setembro"></label>
+      <label>Campanha<select id="eventoCampanha"><option value="">Sem campanha</option></select></label>
+      <label>Descrição<input id="eventoDescricao" maxlength="240"></label>
+      <label>Início<input id="eventoInicio" type="datetime-local" required></label>
+      <label>Fim<input id="eventoFim" type="datetime-local" required></label>
+      <label>Status<select id="eventoStatus"><option value="agendado">Agendado</option><option value="em_andamento">Em andamento</option><option value="encerrado">Encerrado</option></select></label>
+      <div class="form-actions"><button class="btn ghost" id="cancelarEvento" type="button">Cancelar</button><button class="btn primary" type="submit">Salvar evento</button></div>
+    </form>
+    <div id="eventosList" class="list"></div>
+  </section>
+
+  <section class="panel tab-panel" data-panel="maquinas" hidden>
+    <div class="panel-head"><div><h2>Máquinas</h2><p>Cadastre os pontos físicos e os dispositivos ESP32.</p></div></div>
+    <form id="maquinaForm" class="form-grid">
+      <input type="hidden" id="maquinaId">
+      <label>Nome<input id="maquinaNome" required maxlength="120" placeholder="Ex.: TAMPAÊ — ETEC Atibaia"></label>
+      <label>Latitude<input id="maquinaLatitude" type="number" step="any" required placeholder="-23.070100"></label>
+      <label>Longitude<input id="maquinaLongitude" type="number" step="any" required placeholder="-46.550000"></label>
+      <label>Status<select id="maquinaStatus"><option value="ativa">Ativa</option><option value="inativa">Inativa</option><option value="manutencao">Manutenção</option></select></label>
+      <label class="wide">Device token<input id="maquinaToken" required placeholder="Deixe vazio para gerar automaticamente"></label>
+      <div class="form-actions"><button class="btn ghost" id="cancelarMaquina" type="button">Cancelar</button><button class="btn primary" type="submit">Salvar máquina</button></div>
+    </form>
+    <div id="maquinasList" class="list"></div>
+  </section>
+
+  <section class="panel tab-panel" data-panel="conquistas" hidden>
+    <div class="panel-head"><div><h2>Conquistas</h2><p>Cadastre metas que podem ser vinculadas a uma campanha.</p></div></div>
+    <form id="conquistaForm" class="form-grid">
+      <input type="hidden" id="conquistaId">
+      <label>Nome<input id="conquistaNome" required maxlength="120" placeholder="Ex.: Guardião das tampinhas"></label>
+      <label>Campanha<select id="conquistaCampanha"><option value="">Global</option></select></label>
+      <label>Descrição<input id="conquistaDescricao" maxlength="240"></label>
+      <label>Tipo de meta<select id="conquistaTipo"><option value="tampinhas">Tampinhas</option><option value="peso">Peso</option><option value="pontos">Pontos</option></select></label>
+      <label>Valor da meta<input id="conquistaMeta" type="number" min="1" step="1" required></label>
+      <div class="form-actions"><button class="btn ghost" id="cancelarConquista" type="button">Cancelar</button><button class="btn primary" type="submit">Salvar conquista</button></div>
+    </form>
+    <div id="conquistasList" class="list"></div>
+  </section>
+</main>
+
+<section class="access" id="access" hidden>
+  <div class="access-card">
+    <span class="material-symbols-rounded">admin_panel_settings</span>
+    <h1>Área administrativa</h1>
+    <p id="accessText">Verificando permissões...</p>
+    <button class="btn primary" id="btnClaim" type="button" hidden>Ativar primeiro administrador</button>
+    <a class="btn ghost" href="../inicio/home.html">Voltar ao início</a>
+  </div>
+</section>
+
+<script type="module" src="admin.js"></script>
+</body>
+</html>
