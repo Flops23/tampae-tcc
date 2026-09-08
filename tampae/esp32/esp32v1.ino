@@ -13,33 +13,19 @@
 #include <WiFi.h>
 #include <WebServer.h>
 
-// ------------------------------------------------------------
-// CONFIGURAÇÃO WI-FI
-// ------------------------------------------------------------
 const char* WIFI_SSID = "SEU_HOTSPOT";
 const char* WIFI_PASSWORD = "SUA_SENHA";
 
-// ------------------------------------------------------------
-// SUPABASE
-// ------------------------------------------------------------
 const char* SUPABASE_URL = "https://jtmbsyharkxrpnkunbuj.supabase.co";
 const char* SUPABASE_ANON_KEY = "sb_publishable_TeblGQP9D6s24o0IUiZbAg_CKxmxgPo";
 
-// ------------------------------------------------------------
-// IDENTIFICAÇÃO DA MÁQUINA
-// ------------------------------------------------------------
 const char* MACHINE_ID = "379a1459-797e-47e5-9a73-de949e72f9f5";
 const char* MACHINE_TOKEN = "62263534-37bb-451e-a89f-9c77c3234ddd";
 const char* MACHINE_NAME = "TAMPAÊ — ETEC Prof. Carmine Biagio Tundisi";
-
-// Evento fixo usado durante o desenvolvimento.
 const char* EVENT_ID = "aa1186e6-639c-46d9-8e9a-97239479f3c7";
 
 WebServer server(80);
 
-// ------------------------------------------------------------
-// PAINEL WEB DA MÁQUINA
-// ------------------------------------------------------------
 void handleRoot() {
   String html = R"HTML(
 <!DOCTYPE html>
@@ -108,8 +94,8 @@ void handleRoot() {
   <section class="card details">
     <strong>Machine ID:</strong> <code>%MACHINE_ID%</code><br>
     <strong>Event ID:</strong> <code>%EVENT_ID%</code><br>
-    <strong>MAC:</strong> <span id="mac">carregando...</span><br>
-    <strong>IP:</strong> <span id="ip">carregando...</span>
+    <strong>MAC:</strong> <code>%MAC%</code><br>
+    <strong>IP:</strong> <code>%IP%</code>
   </section>
 </main>
 
@@ -174,7 +160,6 @@ async function checkSession() {
       p_machine_id: MACHINE_ID,
       p_device_token: MACHINE_TOKEN
     });
-
     const session = Array.isArray(data) ? data[0] : data;
     if (session && session.session_id) {
       if (!currentSession || currentSession.session_id !== session.session_id || currentSession.nome !== session.nome) {
@@ -268,11 +253,6 @@ $('closeBtn').addEventListener('click', closeSession);
 createQr();
 checkSession();
 setInterval(checkSession, 1500);
-
-fetch('/info').then(r => r.json()).then(info => {
-  $('mac').textContent = info.mac;
-  $('ip').textContent = info.ip;
-}).catch(() => {});
 </script>
 </body>
 </html>
@@ -284,16 +264,13 @@ fetch('/info').then(r => r.json()).then(info => {
   html.replace("%EVENT_ID%", EVENT_ID);
   html.replace("%SUPABASE_URL%", SUPABASE_URL);
   html.replace("%SUPABASE_KEY%", SUPABASE_ANON_KEY);
+  html.replace("%MAC%", WiFi.macAddress());
+  html.replace("%IP%", WiFi.localIP().toString());
   server.send(200, "text/html; charset=utf-8", html);
 }
 
 void handleHealth() {
   server.send(200, "application/json", "{\"status\":\"ok\",\"firmware\":\"esp32v1\"}");
-}
-
-void handleInfo() {
-  String json = "{\"mac\":\"" + WiFi.macAddress() + "\",\"ip\":\"" + WiFi.localIP().toString() + ""}";
-  server.send(200, "application/json", json);
 }
 
 void connectWiFi() {
@@ -342,7 +319,6 @@ void setup() {
 
   server.on("/", HTTP_GET, handleRoot);
   server.on("/health", HTTP_GET, handleHealth);
-  server.on("/info", HTTP_GET, handleInfo);
   server.begin();
 
   Serial.println("Servidor HTTP iniciado na porta 80.");
@@ -351,7 +327,6 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Reconecta automaticamente caso o hotspot seja interrompido.
   if (WiFi.status() != WL_CONNECTED) {
     static unsigned long lastReconnect = 0;
     if (millis() - lastReconnect >= 10000) {
