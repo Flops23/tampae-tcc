@@ -7,7 +7,9 @@
 #include <Adafruit_SSD1306.h>
 
 // ============================================================
-// TAMPAÊ - TESTE DE INTEGRAÇÃO ESP32 + SUPABASE + APP
+// TAMPAÊ - INTEGRACAO ESP32 + SUPABASE + APP
+// LDR = deteccao da tampinha
+// POTENCIOMETRO = simulacao da balanca (0 a 500 g)
 // ============================================================
 
 const char* WIFI_SSID = "esp32";
@@ -220,8 +222,18 @@ void consultarSessao() {
   }
 }
 
+// ============================================================
+// REGISTRO DA TAMPA
+// O LDR confirma a passagem.
+// O potenciometro fornece o peso atual da balanca simulada.
+// ============================================================
 bool registrarTampa() {
   if (!sessaoAtiva || sessionId.length() == 0) return false;
+
+  // Le o potenciometro no momento exato da passagem.
+  // 0 ADC = 0 g e 4095 ADC = 500 g.
+  int valorPot = analogRead(PINO_POT);
+  pesoGramas = ((float)valorPot / 4095.0) * PESO_MAXIMO_GRAMAS;
 
   WiFiClientSecure client;
   HTTPClient http;
@@ -236,7 +248,7 @@ bool registrarTampa() {
   body += "\"p_tipo_coleta\":\"unitaria\",";
   body += "\"p_quantidade_real\":1,";
   body += "\"p_quantidade_estimada\":null,";
-  body += "\"p_peso_real_gramas\":null,";
+  body += "\"p_peso_real_gramas\":" + String(pesoGramas, 2) + ",";
   body += "\"p_peso_estimado_gramas\":null";
   body += "}";
 
@@ -247,7 +259,12 @@ bool registrarTampa() {
   if (code >= 200 && code < 300) {
     passagens++;
     pontos++;
+
     Serial.println("Coleta registrada no banco.");
+    Serial.print("Peso enviado: ");
+    Serial.print(pesoGramas, 2);
+    Serial.println(" g");
+
     mostrarOperacao();
     return true;
   }
@@ -344,22 +361,26 @@ void loop() {
     consultarSessao();
   }
 
+  // O potenciometro funciona como uma balanca de 0 a 500 g.
+  // O valor fica disponivel no OLED e e lido novamente quando uma tampinha passa.
   int valorPot = analogRead(PINO_POT);
   pesoGramas = ((float)valorPot / 4095.0) * PESO_MAXIMO_GRAMAS;
 
   int valorLDR = analogRead(PINO_LDR);
   bool objetoDetectado = (valorLDR < LIMIAR_LDR);
 
+  // O LDR detecta a passagem. Somente uma transicao livre -> bloqueado
+  // gera uma coleta, evitando contar a mesma tampinha varias vezes.
   if (sessaoAtiva && objetoDetectado && !estadoAnteriorLDR) {
     unsigned long agora = millis();
 
     if (agora - ultimaPassagem >= DEBOUNCE_MS) {
-      if (registrarTampa()) {
-        ultimaPassagem = agora;
-      }
+      registrarTampa();
+      ultimaPassagem = agora;
     }
   }
 
   estadoAnteriorLDR = objetoDetectado;
+
   delay(50);
 }
