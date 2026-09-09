@@ -2,10 +2,8 @@
 import { supabase } from "../../js/supabase.js";
 import { requireAuth } from "../../js/auth.js";
 
-// Atalho para buscar elementos pelo id.
 const $ = (id) => document.getElementById(id);
 
-// Estado local do leitor e da sessão atual.
 let stream = null;
 let scanning = false;
 let animationFrame = null;
@@ -13,10 +11,13 @@ let sessionTimer = null;
 let sessionWatcher = null;
 let currentSession = null;
 let currentUser = null;
+let finalizando = false;
 
-// Alterna entre os diferentes estados visuais da tela de coleta.
+// Tempo de segurança para a máquina detectar e registrar as últimas tampinhas.
+const JANELA_FINALIZACAO_MS = 5000;
+
 function showState(state) {
-    ["scanOverlay", "statePermissao", "stateErro", "stateConectando", "sessionView", "stateEncerrada"].forEach((id) => {
+    ["scanOverlay", "statePermissao", "stateErro", "stateConectando", "sessionView", "stateFinalizando", "stateEncerrada"].forEach((id) => {
         const element = $(id);
         if (element) element.style.display = "none";
     });
@@ -24,7 +25,6 @@ function showState(state) {
     if (target) target.style.display = state === "scanOverlay" ? "block" : "flex";
 }
 
-// Para a câmera e cancela o loop de leitura do QR Code.
 async function stopCamera() {
     scanning = false;
     if (animationFrame) cancelAnimationFrame(animationFrame);
@@ -34,7 +34,6 @@ async function stopCamera() {
     if ($("video")) $("video").srcObject = null;
 }
 
-// Solicita acesso à câmera traseira e inicia a leitura dos quadros.
 async function startCamera() {
     await stopCamera();
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -56,7 +55,6 @@ async function startCamera() {
     }
 }
 
-// Captura um quadro da câmera, envia os pixels ao jsQR e continua até encontrar um código.
 function scanFrame() {
     if (!scanning) return;
     const video = $("video");
@@ -77,7 +75,6 @@ function scanFrame() {
     animationFrame = requestAnimationFrame(scanFrame);
 }
 
-// Aceita o payload JSON do QR e também mantém compatibilidade com um QR contendo apenas o ID.
 function parseQr(raw) {
     const text = String(raw).trim();
     try {
@@ -88,7 +85,6 @@ function parseQr(raw) {
     }
 }
 
-// Valida a máquina e cria uma nova sessão vinculando usuário, máquina e evento.
 async function handleQr(raw) {
     showState("stateConectando");
     $("conectandoTexto").textContent = "Validando máquina...";
@@ -121,7 +117,6 @@ async function handleQr(raw) {
     currentUser = user;
     await closeOwnWaitingSessions();
 
-    // Cria a sessão no banco. O eventId vindo do QR é gravado em evento_id.
     const { data: session, error } = await supabase
         .from("machine_sessions")
         .insert({ machine_id: machine.id, user_id: user.id, evento_id: eventId || null })
@@ -136,6 +131,7 @@ async function handleQr(raw) {
     }
 
     currentSession = session;
+    finalizando = false;
     $("maquinaNome").textContent = machine.nome;
     startSessionTimer(new Date(session.expira_em));
     startSessionWatcher();
@@ -143,7 +139,6 @@ async function handleQr(raw) {
     await stopCamera();
 }
 
-// Fecha sessões antigas do mesmo usuário que ainda estejam aguardando.
 async function closeOwnWaitingSessions() {
     const { data } = await supabase
         .from("machine_sessions")
@@ -155,7 +150,6 @@ async function closeOwnWaitingSessions() {
     }
 }
 
-// Mantém o contador visual sincronizado com o horário de expiração da sessão.
 function startSessionTimer(expiresAt) {
     clearInterval(sessionTimer);
     const total = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 1000));
@@ -170,14 +164,13 @@ function startSessionTimer(expiresAt) {
         ring.style.strokeDashoffset = circumference * (1 - remaining / total);
         if (remaining <= 0) {
             clearInterval(sessionTimer);
-            finishFromServer("Sessão expirada");
+            finishFromServer("Sessão expirada", false);
         }
     };
     tick();
     sessionTimer = setInterval(tick, 1000);
 }
 
-// Consulta periodicamente o banco para descobrir se a sessão foi encerrada pela máquina ou pelo usuário.
 function startSessionWatcher() {
     clearInterval(sessionWatcher);
     sessionWatcher = setInterval(checkSessionState, 1200);
@@ -189,9 +182,8 @@ function stopSessionWatcher() {
     sessionWatcher = null;
 }
 
-// Verifica o estado atual da sessão no banco.
 async function checkSessionState() {
-    if (!currentSession?.id) return;
+    if (!currentSession?.id || finalizando) return;
     const { data, error } = await supabase
         .from("machine_sessions")
         .select("id,status,expira_em,concluida_em")
@@ -206,38 +198,60 @@ async function checkSessionState() {
         return;
     }
     if (new Date(data.expira_em).getTime() <= Date.now()) {
-        await finishFromServer("Sessão expirada", true);
+        await finishFromServer("Sessão expirada", false);
     }
 }
 
-// Soma os pontos das coletas associadas à sessão.
-async function getSessionPoints() {
-    if (!currentSession) return 0;
+async function getSessionPoints(session) {
+    if (!session) return 0;
     const { data } = await supabase
         .from("collections")
         .select("pontos")
-        .eq("user_id", currentSession.user_id)
-        .eq("machine_id", currentSession.machine_id)
-        .eq("evento_id", currentSession.evento_id)
-        .gte("criado_em", currentSession.criado_em);
+        .eq("user_id", session.user_id)
+        .eq("machine_id", session.machine_id)
+        .eq("evento_id", session.evento_id)
+        .gte("criado_em", session.criado_em)
+        .lte("criado_em", new Date().toISOString());
     return (data || []).reduce((sum, row) => sum + Number(row.pontos || 0), 0);
 }
 
-// Finaliza a sessão, tenta obter os pontos registrados e apresenta o resultado ao usuário.
+// Dá uma janela para a máquina detectar as últimas tampinhas antes de fechar no banco.
+async function waitForFinalCollections() {
+    showState("stateFinalizando");
+    const fim = Date.now() + JANELA_FINALIZACAO_MS;
+
+    const tick = () => {
+        const restante = Math.max(0, fim - Date.now());
+        $("tempoFinalizacao").textContent = `${Math.ceil(restante / 1000)}s`;
+    };
+
+    tick();
+    const interval = setInterval(tick, 100);
+    await new Promise((resolve) => setTimeout(resolve, JANELA_FINALIZACAO_MS));
+    clearInterval(interval);
+}
+
 async function finishFromServer(title, requestClose = true) {
     if (!currentSession?.id) {
         showClosed(title, "+0 pts", "A sessão foi encerrada.");
         return;
     }
+    if (finalizando) return;
+
     const sessionBeforeClose = { ...currentSession };
     clearInterval(sessionTimer);
     stopSessionWatcher();
+
+    // No encerramento manual, aguarda 5 s para a máquina registrar tampinhas que ainda estejam caindo.
+    if (requestClose) {
+        finalizando = true;
+        await waitForFinalCollections();
+    }
 
     let points = 0;
     let closeError = null;
 
     if (requestClose) {
-        // A RPC encerra a sessão e devolve o total de pontos calculado pelo backend.
         const { data, error } = await supabase.rpc("encerrar_sessao_usuario", {
             p_session_id: sessionBeforeClose.id
         });
@@ -248,27 +262,19 @@ async function finishFromServer(title, requestClose = true) {
         }
     }
 
-    // Se a RPC falhar ou não for solicitada, usa as collections como fallback para calcular os pontos.
     if (closeError || !requestClose) {
-        const { data: fallback } = await supabase
-            .from("collections")
-            .select("pontos")
-            .eq("user_id", sessionBeforeClose.user_id)
-            .eq("machine_id", sessionBeforeClose.machine_id)
-            .eq("evento_id", sessionBeforeClose.evento_id)
-            .gte("criado_em", sessionBeforeClose.criado_em);
-        points = (fallback || []).reduce((sum, item) => sum + Number(item.pontos || 0), 0);
+        points = await getSessionPoints(sessionBeforeClose);
     }
 
     currentSession = null;
+    finalizando = false;
     showClosed(
         title,
         `+${points} pts`,
-        points > 0 ? "Sua sessão foi encerrada e seus pontos foram contabilizados." : "Sua sessão foi encerrada. Nenhuma coleta foi registrada nesta sessão."
+        points > 0 ? "Sessão encerrada. Seus pontos foram contabilizados." : "Sessão encerrada. Nenhuma coleta foi registrada nesta sessão."
     );
 }
 
-// Atualiza a tela final com o motivo do encerramento e os pontos ganhos.
 function showClosed(title, points, text) {
     clearInterval(sessionTimer);
     stopSessionWatcher();
@@ -278,7 +284,6 @@ function showClosed(title, points, text) {
     showState("stateEncerrada");
 }
 
-// Inicializa a página, exige autenticação e conecta os botões às ações.
 async function init() {
     const user = await requireAuth();
     if (!user) return;
@@ -290,7 +295,6 @@ async function init() {
     showState("statePermissao");
 }
 
-// Ao sair da página, libera câmera e timers para evitar recursos ativos em segundo plano.
 window.addEventListener("pagehide", async () => {
     await stopCamera();
     stopSessionWatcher();
