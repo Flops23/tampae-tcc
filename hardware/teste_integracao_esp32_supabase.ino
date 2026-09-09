@@ -135,6 +135,7 @@ bool testarBanco() {
   }
 
   int code = http.GET();
+  String response = http.getString();
   http.end();
 
   if (code == 200) {
@@ -145,6 +146,8 @@ bool testarBanco() {
 
   Serial.print("ERRO Supabase. HTTP: ");
   Serial.println(code);
+  Serial.print("Resposta Supabase: ");
+  Serial.println(response);
   return false;
 }
 
@@ -164,6 +167,8 @@ void consultarSessao() {
     if (sessaoAtiva) {
       Serial.print("Sessao: erro na consulta. HTTP: ");
       Serial.println(code);
+      Serial.print("Resposta Supabase: ");
+      Serial.println(http.getString());
     }
     http.end();
     return;
@@ -236,6 +241,7 @@ bool registrarTampa() {
   body += "}";
 
   int code = http.POST(body);
+  String response = http.getString();
   http.end();
 
   if (code >= 200 && code < 300) {
@@ -248,6 +254,8 @@ bool registrarTampa() {
 
   Serial.print("ERRO ao registrar coleta. HTTP: ");
   Serial.println(code);
+  Serial.print("Resposta Supabase: ");
+  Serial.println(response);
   return false;
 }
 
