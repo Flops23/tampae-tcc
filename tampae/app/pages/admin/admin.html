@@ -8,6 +8,13 @@
 <link rel="stylesheet" href="../../css/layout.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded" />
 <link rel="stylesheet" href="admin.css">
+<style>
+  /* A estrutura global do PWA usa overflow:hidden no body. A tela administrativa precisa rolar a página inteira. */
+  html { min-height: 100%; height: auto; overflow-y: auto; }
+  body { height: auto !important; min-height: 100vh; display: block !important; overflow-y: auto !important; overflow-x: hidden !important; }
+  .top-bar { position: sticky; top: 0; }
+  .admin-page { min-height: 0; }
+</style>
 </head>
 <body>
 <header class="top-bar">
