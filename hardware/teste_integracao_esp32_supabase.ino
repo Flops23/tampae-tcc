@@ -20,11 +20,13 @@ const char* MACHINE_TOKEN = "62263534-37bb-451e-a89f-9c77c3234ddd";
 #define OLED_ADDRESS 0x3C
 #define PINO_LDR 35
 #define PINO_POT 34
+#define PINO_BUTTON 27
 #define SDA_PIN 21
 #define SCL_PIN 22
 
 #define LIMIAR_LDR 300
 #define DEBOUNCE_MS 500
+#define DEBOUNCE_BUTTON_MS 80
 #define PESO_MAXIMO_GRAMAS 500.0
 #define TAMANHO_FILA 20
 
@@ -35,6 +37,7 @@ String userId = "";
 String userName = "";
 String eventId = "";
 volatile bool sessaoAtiva = false;
+volatile bool finalizacaoSolicitada = false;
 int passagens = 0;
 int pontos = 0;
 float pesoGramas = 0;
@@ -50,6 +53,7 @@ portMUX_TYPE filaMux = portMUX_INITIALIZER_UNLOCKED;
 
 unsigned long ultimaConsultaSessao = 0;
 unsigned long ultimaAtualizacaoTela = 0;
+unsigned long ultimoCliqueBotao = 0;
 
 void mostrarTela(const String& l1, const String& l2 = "", const String& l3 = "", const String& l4 = "") {
   display.clearDisplay();
@@ -71,10 +75,14 @@ void mostrarOperacao() {
 
   display.setCursor(0, 15);
   if (sessaoAtiva) {
-    display.print("Usuario: ");
-    String nome = userName;
-    if (nome.length() > 17) nome = nome.substring(0, 17);
-    display.println(nome);
+    if (finalizacaoSolicitada) {
+      display.println("Finalizando sessao");
+    } else {
+      display.print("Usuario: ");
+      String nome = userName;
+      if (nome.length() > 17) nome = nome.substring(0, 17);
+      display.println(nome);
+    }
   } else {
     display.println("Aguardando usuario");
   }
@@ -166,7 +174,7 @@ void tarefaSensor(void* parameter) {
     valorLDR = leitura;
     bool bloqueado = (leitura < LIMIAR_LDR);
 
-    if (sessaoAtiva && bloqueado && !bloqueadoAnterior) {
+    if (sessaoAtiva && !finalizacaoSolicitada && bloqueado && !bloqueadoAnterior) {
       unsigned long agora = millis();
       if (agora - ultimaDeteccao >= DEBOUNCE_MS) {
         int leituraPot = analogRead(PINO_POT);
@@ -189,6 +197,31 @@ void tarefaSensor(void* parameter) {
     leituraAnterior = leitura;
     vTaskDelay(pdMS_TO_TICKS(10));
   }
+}
+
+void lerBotaoFinalizar() {
+  static bool estadoAnterior = HIGH;
+  bool estadoAtual = digitalRead(PINO_BUTTON);
+
+  if (estadoAnterior == HIGH && estadoAtual == LOW) {
+    unsigned long agora = millis();
+    if (agora - ultimoCliqueBotao >= DEBOUNCE_BUTTON_MS) {
+      ultimoCliqueBotao = agora;
+
+      if (sessaoAtiva && !finalizacaoSolicitada) {
+        finalizacaoSolicitada = true;
+        Serial.println("========================================");
+        Serial.println("BOTAO DE FINALIZAR PRESSIONADO");
+        Serial.println("Parando novas deteccoes e esvaziando fila...");
+        Serial.println("========================================");
+        mostrarOperacao();
+      } else if (!sessaoAtiva) {
+        Serial.println("Nenhuma sessao ativa para finalizar.");
+      }
+    }
+  }
+
+  estadoAnterior = estadoAtual;
 }
 
 void consultarSessao() {
@@ -219,9 +252,9 @@ void consultarSessao() {
   }
 
   if (item.isNull() || item["session_id"].isNull()) {
-    if (sessaoAtiva) {
-      // A sessão já terminou no servidor. Não apagar uma fila pendente
-      // até que o envio das coletas já detectadas seja concluído.
+    if (sessaoAtiva && !finalizacaoSolicitada) {
+      // A sessão foi encerrada no servidor por outro fluxo.
+      // Não apagar uma fila pendente antes de terminar seu envio.
       if (filaQuantidade == 0) {
         sessaoAtiva = false;
         sessionId = "";
@@ -231,10 +264,10 @@ void consultarSessao() {
         passagens = 0;
         pontos = 0;
         pesoGramas = 0;
-        Serial.println("Sessao encerrada e fila vazia.");
+        Serial.println("Sessao encerrada no servidor.");
         mostrarOperacao();
       } else {
-        Serial.println("Sessao encerrada no app; aguardando envio da fila.");
+        Serial.println("Sessao encerrada no servidor; aguardando envio da fila.");
       }
     }
     return;
@@ -248,6 +281,7 @@ void consultarSessao() {
     userName = item["nome"].as<String>();
     eventId = item["evento_id"].as<String>();
     sessaoAtiva = true;
+    finalizacaoSolicitada = false;
     passagens = 0;
     pontos = 0;
     pesoGramas = 0;
@@ -298,9 +332,6 @@ bool registrarTampa(float peso) {
 }
 
 void processarFilaColetas() {
-  // Processa coletas pendentes mesmo durante o encerramento.
-  // A função registrarTampa() confirma no banco antes de a coleta permanecer
-  // contabilizada na tela.
   float peso;
   if (!retirarFila(peso)) return;
 
@@ -310,13 +341,74 @@ void processarFilaColetas() {
     pontos++;
     Serial.println("Coleta confirmada: +1 ponto.");
   } else {
-    // Devolve a coleta para a fila enquanto a sessão ainda existe.
     if (!adicionarFila(peso)) {
       Serial.println("ERRO: nao foi possivel devolver coleta para a fila.");
     }
     Serial.println("Coleta ainda nao confirmada; mantendo na fila.");
   }
   mostrarOperacao();
+}
+
+bool finalizarSessaoNaMaquina() {
+  if (!sessaoAtiva || sessionId.length() == 0) return false;
+  if (filaQuantidade > 0) return false;
+
+  WiFiClientSecure client;
+  HTTPClient http;
+  String endpoint = String(SUPABASE_URL) + "/rest/v1/rpc/finalizar_sessao_maquina";
+  if (!prepararHttp(http, client, endpoint)) return false;
+
+  String body = "{";
+  body += "\"p_machine_id\":\"" + String(MACHINE_ID) + "\",";
+  body += "\"p_device_token\":\"" + String(MACHINE_TOKEN) + "\",";
+  body += "\"p_session_id\":\"" + sessionId + "\"";
+  body += "}";
+
+  int code = http.POST(body);
+  String response = http.getString();
+  http.end();
+
+  if (code < 200 || code >= 300) {
+    Serial.print("ERRO ao finalizar sessao. HTTP: ");
+    Serial.println(code);
+    Serial.println(response);
+    return false;
+  }
+
+  int pontosFinais = pontos;
+  JsonDocument doc;
+  if (!deserializeJson(doc, response)) {
+    if (doc.is<JsonArray>() && doc.size() > 0 && !doc[0]["pontos_sessao"].isNull()) {
+      pontosFinais = doc[0]["pontos_sessao"].as<int>();
+    } else if (doc.is<JsonObject>() && !doc["pontos_sessao"].isNull()) {
+      pontosFinais = doc["pontos_sessao"].as<int>();
+    }
+  }
+
+  pontos = pontosFinais;
+  Serial.println("========================================");
+  Serial.println("SESSAO FINALIZADA PELA MAQUINA");
+  Serial.print("Usuario: ");
+  Serial.println(userName);
+  Serial.print("Pontos finais: ");
+  Serial.println(pontosFinais);
+  Serial.println("========================================");
+
+  mostrarTela("Sessao finalizada", "Pontos: " + String(pontosFinais), "Obrigado!", "Aguardando...");
+  delay(3000);
+
+  sessaoAtiva = false;
+  finalizacaoSolicitada = false;
+  sessionId = "";
+  userId = "";
+  userName = "";
+  eventId = "";
+  passagens = 0;
+  pontos = 0;
+  pesoGramas = 0;
+  limparFila();
+  mostrarOperacao();
+  return true;
 }
 
 void conectarWiFi() {
@@ -354,6 +446,8 @@ void setup() {
     while (true) delay(1000);
   }
 
+  pinMode(PINO_BUTTON, INPUT_PULLUP);
+
   analogReadResolution(12);
   analogSetPinAttenuation(PINO_LDR, ADC_11db);
   analogSetPinAttenuation(PINO_POT, ADC_11db);
@@ -368,6 +462,8 @@ void setup() {
   Serial.println(valorLDR);
   Serial.print("Limiar LDR: ");
   Serial.println(LIMIAR_LDR);
+  Serial.print("Botao finalizar: GPIO ");
+  Serial.println(PINO_BUTTON);
 
   conectarWiFi();
 
@@ -397,6 +493,8 @@ void setup() {
 }
 
 void loop() {
+  lerBotaoFinalizar();
+
   if (WiFi.status() != WL_CONNECTED) {
     static unsigned long ultimaTentativaWiFi = 0;
     if (millis() - ultimaTentativaWiFi >= 10000) {
@@ -415,20 +513,23 @@ void loop() {
     mostrarOperacao();
   }
 
-  if (millis() - ultimaConsultaSessao >= 1500) {
+  if (!finalizacaoSolicitada && millis() - ultimaConsultaSessao >= 1500) {
     ultimaConsultaSessao = millis();
     consultarSessao();
   }
 
-  processarFilaColetas();
-
-  // Ao fechar a sessao, a fila deve ser esvaziada antes de voltar a aguardar outro usuario.
-  if (!sessaoAtiva && filaQuantidade > 0) {
-    limparFila();
-    passagens = 0;
-    pontos = 0;
-    pesoGramas = 0;
-    mostrarOperacao();
+  // Primeiro envia tudo o que foi detectado antes do botao ser pressionado.
+  if (filaQuantidade > 0) {
+    processarFilaColetas();
+  } else if (finalizacaoSolicitada) {
+    // So finaliza quando nao existe mais nenhuma coleta pendente.
+    if (!finalizarSessaoNaMaquina()) {
+      static unsigned long ultimaTentativaFinalizacao = 0;
+      if (millis() - ultimaTentativaFinalizacao >= 2000) {
+        ultimaTentativaFinalizacao = millis();
+        Serial.println("Aguardando nova tentativa de finalizar a sessao...");
+      }
+    }
   }
 
   delay(10);
