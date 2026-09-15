@@ -19,12 +19,21 @@ const char* MACHINE_TOKEN = "PREENCHA_AQUI";
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
+#define PIN_POTENCIOMETRO 34
+#define PIN_LDR 35
+#define PIN_BOTAO 25
+
+const float GRAMAS_POR_TAMPINHA = 12.0f;
+const int LIMIAR_POTENCIOMETRO = 80;
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 bool sessaoAtiva = false;
 String sessionId, userId, userName, eventId;
 unsigned long ultimaConsulta = 0;
 unsigned long ultimaTentativaWiFi = 0;
+int ultimaLeituraPot = 0;
+int tampinhasSimuladas = 0;
 
 void mostrarTela(const String& linha1, const String& linha2 = "", const String& linha3 = "") {
   display.clearDisplay();
@@ -42,10 +51,11 @@ void mostrarOperacao() {
   display.setTextSize(1);
   display.setCursor(0, 0); display.println("TAMPAE");
   if (sessaoAtiva) {
-    display.setCursor(0, 20); display.println("Usuario:");
+    display.setCursor(0, 16); display.println("Usuario:");
     String nome = userName;
     if (nome.length() > 20) nome = nome.substring(0, 20);
-    display.setCursor(0, 38); display.println(nome);
+    display.setCursor(0, 28); display.println(nome);
+    display.setCursor(0, 44); display.print(tampinhasSimuladas); display.println(" tampinhas");
   } else {
     display.setCursor(0, 28); display.println("Aguardando usuario");
   }
@@ -54,7 +64,7 @@ void mostrarOperacao() {
 
 bool prepararHttp(HTTPClient& http, const String& url) {
   if (!http.begin(url)) {
-    Serial.println("[HTTP] Falha ao iniciar conexão");
+    Serial.println("[HTTP] Falha ao iniciar conexao");
     return false;
   }
   http.addHeader("Content-Type", "application/json");
@@ -64,7 +74,7 @@ bool prepararHttp(HTTPClient& http, const String& url) {
 }
 
 void testarBanco() {
-  Serial.println("[SUPABASE] Testando conexão com o banco...");
+  Serial.println("[SUPABASE] Testando conexao com o banco...");
   HTTPClient http;
   if (!prepararHttp(http, String(SUPABASE_URL) + "/rest/v1/")) return;
   int status = http.GET();
@@ -73,10 +83,48 @@ void testarBanco() {
   http.end();
 }
 
+void registrarColeta(int quantidade) {
+  if (!sessaoAtiva || quantidade <= 0 || WiFi.status() != WL_CONNECTED) return;
+
+  HTTPClient http;
+  String url = String(SUPABASE_URL) + "/rest/v1/collections";
+  if (!prepararHttp(http, url)) return;
+
+  JsonDocument doc;
+  doc["session_id"] = sessionId;
+  doc["machine_id"] = MACHINE_ID;
+  doc["user_id"] = userId;
+  doc["event_id"] = eventId;
+  doc["quantity"] = quantidade;
+  doc["weight_grams"] = quantidade * GRAMAS_POR_TAMPINHA;
+  String body;
+  serializeJson(doc, body);
+
+  int status = http.POST(body);
+  Serial.printf("[COLETA] %d tampinha(s), %.0f g | HTTP %d\n", quantidade, quantidade * GRAMAS_POR_TAMPINHA, status);
+  if (status >= 200 && status < 300) {
+    tampinhasSimuladas += quantidade;
+    mostrarOperacao();
+  } else {
+    Serial.println(http.getString());
+  }
+  http.end();
+}
+
+void lerPotenciometro() {
+  int leitura = analogRead(PIN_POTENCIOMETRO);
+  int diferenca = abs(leitura - ultimaLeituraPot);
+  ultimaLeituraPot = leitura;
+
+  if (!sessaoAtiva || diferenca < LIMIAR_POTENCIOMETRO) return;
+
+  int quantidade = max(1, (int)round((float)leitura / 4095.0f * 10.0f));
+  registrarColeta(quantidade);
+}
+
 void consultarSessao() {
   if (WiFi.status() != WL_CONNECTED) return;
 
-  Serial.println("[SESSAO] Consultando sessão ativa...");
   HTTPClient http;
   String url = String(SUPABASE_URL) + "/rest/v1/rpc/get_active_session";
   if (!prepararHttp(http, url)) return;
@@ -87,32 +135,21 @@ void consultarSessao() {
   String body;
   serializeJson(request, body);
 
-  Serial.print("[SESSAO] Enviando: ");
-  Serial.println(body);
-
   int status = http.POST(body);
   String resposta = http.getString();
   http.end();
+  Serial.printf("[SESSAO] HTTP %d | %s\n", status, resposta.c_str());
 
-  Serial.printf("[SESSAO] Status HTTP: %d\n", status);
-  Serial.print("[SESSAO] Resposta: ");
-  Serial.println(resposta);
-
-  if (status < 200 || status >= 300) {
-    Serial.println("[ERRO] Falha na consulta da sessão");
-    return;
-  }
+  if (status < 200 || status >= 300) return;
 
   JsonDocument doc;
   DeserializationError erro = deserializeJson(doc, resposta);
   if (erro != DeserializationError::Ok || !doc["session_id"].is<const char*>()) {
     if (sessaoAtiva) {
-      Serial.println("[SESSAO] Sessão encerrada ou inexistente");
       sessaoAtiva = false;
       sessionId = userId = userName = eventId = "";
+      tampinhasSimuladas = 0;
       mostrarOperacao();
-    } else {
-      Serial.println("[SESSAO] Nenhuma sessão ativa");
     }
     return;
   }
@@ -124,24 +161,16 @@ void consultarSessao() {
     userName = doc["nome"].as<String>();
     eventId = doc["evento_id"].as<String>();
     sessaoAtiva = true;
-    Serial.println("[SESSAO] Nova sessão encontrada");
-    Serial.print("[SESSAO] Usuário: ");
-    Serial.println(userName);
-    Serial.print("[SESSAO] Session ID: ");
-    Serial.println(sessionId);
+    tampinhasSimuladas = 0;
+    Serial.println("[SESSAO] Nova sessao encontrada");
+    Serial.println("[SESSAO] Usuario: " + userName);
     mostrarOperacao();
   }
 }
 
 void conectarWiFi() {
   Serial.println("[WIFI] Tentando conectar...");
-  Serial.print("[WIFI] Rede: ");
-  Serial.println(WIFI_SSID);
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("[WIFI] Já conectado");
-    return;
-  }
+  if (WiFi.status() == WL_CONNECTED) return;
 
   WiFi.disconnect(true);
   delay(300);
@@ -157,16 +186,12 @@ void conectarWiFi() {
   Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("[WIFI] Conectado com sucesso");
-    Serial.print("[WIFI] IP: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("[WIFI] RSSI: ");
-    Serial.println(WiFi.RSSI());
+    Serial.println("[WIFI] Conectado");
+    Serial.print("[WIFI] MAC: "); Serial.println(WiFi.macAddress());
+    Serial.print("[WIFI] IP: "); Serial.println(WiFi.localIP());
     mostrarOperacao();
     testarBanco();
   } else {
-    Serial.print("[WIFI] Falha. Código de status: ");
-    Serial.println((int)WiFi.status());
     mostrarTela("TAMPAE", "Falha Wi-Fi", "Ver Serial");
   }
 }
@@ -174,16 +199,15 @@ void conectarWiFi() {
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  Serial.println();
-  Serial.println("============================");
   Serial.println("TAMPAE - ESP32V1 INICIANDO");
-  Serial.println("============================");
+
+  pinMode(PIN_POTENCIOMETRO, INPUT);
+  pinMode(PIN_LDR, INPUT);
+  pinMode(PIN_BOTAO, INPUT_PULLUP);
 
   Wire.begin();
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println("[OLED] Falha ao iniciar display");
-  } else {
-    Serial.println("[OLED] Display iniciado");
   }
 
   mostrarTela("TAMPAE", "Iniciando...");
@@ -195,7 +219,6 @@ void loop() {
 
   if (WiFi.status() != WL_CONNECTED && agora - ultimaTentativaWiFi >= 10000) {
     ultimaTentativaWiFi = agora;
-    Serial.println("[WIFI] Conexão perdida ou não estabelecida");
     conectarWiFi();
   }
 
@@ -204,5 +227,6 @@ void loop() {
     consultarSessao();
   }
 
-  delay(20);
+  lerPotenciometro();
+  delay(80);
 }
