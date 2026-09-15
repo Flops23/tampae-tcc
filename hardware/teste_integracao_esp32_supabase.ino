@@ -7,8 +7,8 @@
 #include <Adafruit_SSD1306.h>
 
 // TAMPAE - ESP32 + SUPABASE + LDR + BALANCA SIMULADA
-const char* WIFI_SSID = "esp32";
-const char* WIFI_PASSWORD = "123456";
+const char* WIFI_SSID = "FRANCISCO";
+const char* WIFI_PASSWORD = "Nizete@10";
 const char* SUPABASE_URL = "https://jtmbsyharkxrpnkunbuj.supabase.co";
 const char* SUPABASE_KEY = "sb_publishable_TeblGQP9D6s24o0IUiZbAg_CKxmxgPo";
 const char* MACHINE_ID = "379a1459-797e-47e5-9a73-de949e72f9f5";
@@ -156,8 +156,6 @@ bool retirarFila(float& peso) {
   return retirou;
 }
 
-// Tarefa independente para o LDR.
-// Assim a leitura nao para quando uma requisicao HTTP estiver acontecendo.
 void tarefaSensor(void* parameter) {
   int leituraAnterior = analogRead(PINO_LDR);
   bool bloqueadoAnterior = (leituraAnterior < LIMIAR_LDR);
@@ -222,16 +220,22 @@ void consultarSessao() {
 
   if (item.isNull() || item["session_id"].isNull()) {
     if (sessaoAtiva) {
-      sessaoAtiva = false;
-      sessionId = "";
-      userId = "";
-      userName = "";
-      eventId = "";
-      limparFila();
-      passagens = 0;
-      pontos = 0;
-      Serial.println("Sessao encerrada ou expirada.");
-      mostrarOperacao();
+      // A sessão já terminou no servidor. Não apagar uma fila pendente
+      // até que o envio das coletas já detectadas seja concluído.
+      if (filaQuantidade == 0) {
+        sessaoAtiva = false;
+        sessionId = "";
+        userId = "";
+        userName = "";
+        eventId = "";
+        passagens = 0;
+        pontos = 0;
+        pesoGramas = 0;
+        Serial.println("Sessao encerrada e fila vazia.");
+        mostrarOperacao();
+      } else {
+        Serial.println("Sessao encerrada no app; aguardando envio da fila.");
+      }
     }
     return;
   }
@@ -246,6 +250,7 @@ void consultarSessao() {
     sessaoAtiva = true;
     passagens = 0;
     pontos = 0;
+    pesoGramas = 0;
 
     Serial.println("Usuario conectado pelo app.");
     Serial.print("Nome: ");
@@ -278,8 +283,6 @@ bool registrarTampa(float peso) {
   http.end();
 
   if (code >= 200 && code < 300) {
-    passagens++;
-    pontos++;
     pesoGramas = peso;
     Serial.println("Coleta registrada no banco.");
     Serial.print("Peso enviado: ");
@@ -295,26 +298,25 @@ bool registrarTampa(float peso) {
 }
 
 void processarFilaColetas() {
-  if (!sessaoAtiva) return;
-
+  // Processa coletas pendentes mesmo durante o encerramento.
+  // A função registrarTampa() confirma no banco antes de a coleta permanecer
+  // contabilizada na tela.
   float peso;
   if (!retirarFila(peso)) return;
 
-  // Atualiza a tela imediatamente, antes de esperar a internet.
   pesoGramas = peso;
-  passagens++;
-  pontos++;
-  mostrarOperacao();
-
-  // A coleta ja foi detectada e contabilizada localmente.
-  // O envio ao banco acontece em seguida.
-  if (!registrarTampa(peso)) {
-    // Se o envio falhar, desfaz a exibicao local para nao apresentar
-    // uma coleta que nao foi aceita pelo banco.
-    passagens--;
-    pontos--;
-    Serial.println("Coleta nao confirmada pelo banco.");
+  if (registrarTampa(peso)) {
+    passagens++;
+    pontos++;
+    Serial.println("Coleta confirmada: +1 ponto.");
+  } else {
+    // Devolve a coleta para a fila enquanto a sessão ainda existe.
+    if (!adicionarFila(peso)) {
+      Serial.println("ERRO: nao foi possivel devolver coleta para a fila.");
+    }
+    Serial.println("Coleta ainda nao confirmada; mantendo na fila.");
   }
+  mostrarOperacao();
 }
 
 void conectarWiFi() {
@@ -383,7 +385,6 @@ void setup() {
   delay(1000);
   mostrarOperacao();
 
-  // O sensor roda em tarefa separada para nao parar durante requisicoes HTTP.
   xTaskCreatePinnedToCore(
     tarefaSensor,
     "TarefaLDR",
@@ -406,24 +407,29 @@ void loop() {
     return;
   }
 
-  // Peso da balanca simulada sempre acompanha o potenciometro.
   int valorPot = analogRead(PINO_POT);
   pesoGramas = ((float)valorPot / 4095.0) * PESO_MAXIMO_GRAMAS;
 
-  // OLED atualizado continuamente, sem depender de resposta do Supabase.
   if (millis() - ultimaAtualizacaoTela >= 200) {
     ultimaAtualizacaoTela = millis();
     mostrarOperacao();
   }
 
-  // Consulta a sessao em intervalos maiores para nao interferir no restante.
   if (millis() - ultimaConsultaSessao >= 1500) {
     ultimaConsultaSessao = millis();
     consultarSessao();
   }
 
-  // Envia as tampinhas detectadas pelo sensor em fila.
   processarFilaColetas();
+
+  // Ao fechar a sessao, a fila deve ser esvaziada antes de voltar a aguardar outro usuario.
+  if (!sessaoAtiva && filaQuantidade > 0) {
+    limparFila();
+    passagens = 0;
+    pontos = 0;
+    pesoGramas = 0;
+    mostrarOperacao();
+  }
 
   delay(10);
 }
