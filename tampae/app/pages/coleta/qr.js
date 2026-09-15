@@ -288,7 +288,6 @@ async function init() {
     $("btnPedirPermissao")?.addEventListener("click", startCamera);
     $("btnTentarNovamente")?.addEventListener("click", startCamera);
     $("btnEscanearDeNovo")?.addEventListener("click", startCamera);
-    $("btnEncerrar")?.addEventListener("click", () => finishFromServer("Sessão encerrada", true));
     showState("statePermissao");
 }
 
