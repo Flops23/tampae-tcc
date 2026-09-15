@@ -13,7 +13,8 @@ let currentSession = null;
 let currentUser = null;
 let finalizando = false;
 
-// Tempo de segurança para a máquina detectar e registrar as últimas tampinhas.
+// Janela final coordenada pelo banco. O RPC mantém a sessão aberta
+// por este período para permitir que o ESP32 envie as últimas coletas.
 const JANELA_FINALIZACAO_MS = 5000;
 
 function showState(state) {
@@ -215,20 +216,9 @@ async function getSessionPoints(session) {
     return (data || []).reduce((sum, row) => sum + Number(row.pontos || 0), 0);
 }
 
-// Dá uma janela para a máquina detectar as últimas tampinhas antes de fechar no banco.
-async function waitForFinalCollections() {
-    showState("stateFinalizando");
-    const fim = Date.now() + JANELA_FINALIZACAO_MS;
-
-    const tick = () => {
-        const restante = Math.max(0, fim - Date.now());
-        $("tempoFinalizacao").textContent = `${Math.ceil(restante / 1000)}s`;
-    };
-
-    tick();
-    const interval = setInterval(tick, 100);
-    await new Promise((resolve) => setTimeout(resolve, JANELA_FINALIZACAO_MS));
-    clearInterval(interval);
+function atualizarContagemFinalizacao(fim) {
+    const restante = Math.max(0, fim - Date.now());
+    $("tempoFinalizacao").textContent = `${Math.ceil(restante / 1000)}s`;
 }
 
 async function finishFromServer(title, requestClose = true) {
@@ -242,19 +232,26 @@ async function finishFromServer(title, requestClose = true) {
     clearInterval(sessionTimer);
     stopSessionWatcher();
 
-    // No encerramento manual, aguarda 5 s para a máquina registrar tampinhas que ainda estejam caindo.
-    if (requestClose) {
-        finalizando = true;
-        await waitForFinalCollections();
-    }
-
     let points = 0;
     let closeError = null;
 
     if (requestClose) {
+        finalizando = true;
+        showState("stateFinalizando");
+
+        // O RPC já contém a janela de segurança de 5 s. Ele é chamado
+        // imediatamente para manter a sessão aberta enquanto o ESP32 conclui
+        // as coletas pendentes.
+        const fim = Date.now() + JANELA_FINALIZACAO_MS;
+        atualizarContagemFinalizacao(fim);
+        const interval = setInterval(() => atualizarContagemFinalizacao(fim), 100);
+
         const { data, error } = await supabase.rpc("encerrar_sessao_usuario", {
             p_session_id: sessionBeforeClose.id
         });
+
+        clearInterval(interval);
+        $("tempoFinalizacao").textContent = "0s";
         closeError = error;
         if (!error && data) {
             const row = Array.isArray(data) ? data[0] : data;
