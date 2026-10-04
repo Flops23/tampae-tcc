@@ -53,19 +53,26 @@ O projeto possui três partes principais:
 TAMPAÊ
 │
 ├── tampae/
-│   └── app/
-│       ├── js/
-│       └── pages/
-│           ├── login/
-│           ├── inicio/
-│           ├── coleta/
-│           ├── mapa/
-│           ├── perfil/
-│           └── configura/
-│
-├── hardware/
-│   ├── esp32_oled_qr_sessao.ino
-│   └── teste_pontuacao.ino
+│   ├── app/
+│   │   ├── css/
+│   │   ├── img/
+│   │   ├── js/
+│   │   └── pages/
+│   │       ├── admin/
+│   │       ├── coleta/
+│   │       ├── configura/
+│   │       ├── inicio/
+│   │       ├── login/
+│   │       ├── mapa/
+│   │       ├── perfil/
+│   │       └── ranking/
+│   ├── esp32/
+│   │   └── esp32v1.ino
+│   ├── supabase/
+│   │   └── migrations/
+│   ├── index.html
+│   ├── manifest.json
+│   └── sw.js
 │
 └── README.md
 ```
@@ -107,6 +114,6 @@ Os arquivos do projeto possuem comentários explicativos para facilitar o entend
 
 ## 📌 Status
 
-🚧 Projeto acadêmico em desenvolvimento.
+✅ Projeto acadêmico finalizado.
 
 O TAMPAÊ reúne desenvolvimento web, banco de dados, gamificação e integração com hardware para incentivar hábitos sustentáveis.
